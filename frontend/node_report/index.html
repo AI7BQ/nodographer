@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>MeshMap Node Report</title>
+
+	<!-- Google Fonts: Atkinson Hyperlegible -->
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+
+	<!-- DataTables -->
+	<link rel="stylesheet" href="css/datatables.css">
+	<link rel="stylesheet" href="css/buttons.dataTables.css">
+	<link rel="stylesheet" href="css/colReorder.dataTables.css">
+
+	<style>
+		:root {
+			color-scheme: light dark;
+		}
+
+		@media (prefers-color-scheme: light) {
+			:root {
+				--bg-primary: #ffffff;
+				--bg-secondary: #f5f5f5;
+				--text-primary: #333333;
+				--text-secondary: #666666;
+				--border-color: #ddd;
+				--header-shadow: rgba(0, 0, 0, 0.05);
+				--row-hover: #fafafa;
+				--header-hover: #f9f9f9;
+				--link-color: #0066cc;
+				--link-hover: #0052a3;
+				--btn-export-bg: linear-gradient(135deg, #c9d6e8 0%, #d4dde8 100%);
+				--btn-export-bg-hover: linear-gradient(135deg, #b5c3d8 0%, #c0cad8 100%);
+				--btn-export-text: #5a5f7a;
+				--btn-export-shadow: rgba(149, 165, 193, 0.4);
+				--btn-back-bg: linear-gradient(135deg, #d4c9e8 0%, #d8d4e8 100%);
+				--btn-back-bg-hover: linear-gradient(135deg, #c0b5d8 0%, #c8c0d8 100%);
+				--btn-back-text: #5a5f7a;
+				--btn-back-shadow: rgba(149, 165, 193, 0.4);
+				--border-header: 2px solid #b0b0b0;
+			}
+		}
+
+		@media (prefers-color-scheme: dark) {
+			:root {
+				--bg-primary: #1e1e1e;
+				--bg-secondary: #2d2d2d;
+				--text-primary: #e0e0e0;
+				--text-secondary: #a0a0a0;
+				--border-color: #444;
+				--header-shadow: rgba(0, 0, 0, 0.3);
+				--row-hover: #2a2a2a;
+				--header-hover: #252525;
+				--link-color: #66b3ff;
+				--link-hover: #99ccff;
+				--btn-export-bg: linear-gradient(135deg, #4a5a7a 0%, #515d7a 100%);
+				--btn-export-bg-hover: linear-gradient(135deg, #5a6a8a 0%, #616d8a 100%);
+				--btn-export-text: #e0e0e0;
+				--btn-export-shadow: rgba(102, 179, 255, 0.3);
+				--btn-back-bg: linear-gradient(135deg, #5a4a7a 0%, #5d5187 100%);
+				--btn-back-bg-hover: linear-gradient(135deg, #6a5a8a 0%, #6d6197 100%);
+				--btn-back-text: #e0e0e0;
+				--btn-back-shadow: rgba(102, 179, 255, 0.3);
+				--border-header: 2px solid #555;
+			}
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		html, body {
+			margin: 0;
+			padding: 0;
+			height: 100%;
+		}
+
+		body {
+			font-family: "Atkinson Hyperlegible Next", sans-serif;
+			font-weight: 450;
+			font-size: 10px;
+			background-color: var(--bg-secondary);
+			color: var(--text-primary);
+		}
+
+		header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 15px 20px;
+			background-color: var(--bg-primary);
+			border-bottom: 1px solid var(--border-color);
+			box-shadow: 0 1px 3px var(--header-shadow);
+		}
+
+		.header-left {
+			display: flex;
+			align-items: center;
+			gap: 15px;
+		}
+
+		h1 {
+			margin: 0;
+			font-size: 20px;
+			font-weight: 600;
+			color: var(--text-primary);
+		}
+
+		button, .back-btn {
+			font-family: "Atkinson Hyperlegible Next", sans-serif;
+			font-size: 11px;
+			font-weight: 500;
+			padding: 8px 16px;
+			border: none;
+			border-radius: 6px;
+			cursor: pointer;
+			transition: all 0.3s ease;
+		}
+
+		.back-btn {
+			text-decoration: none;
+			display: inline-flex;
+			align-items: center;
+		}
+
+		#exportBtn {
+			background: var(--btn-export-bg);
+			color: var(--btn-export-text);
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		#exportBtn:hover {
+			background: var(--btn-export-bg-hover);
+			box-shadow: 0 4px 12px var(--btn-export-shadow);
+			transform: translateY(-1px);
+		}
+
+		#exportBtn:active {
+			transform: translateY(0);
+			box-shadow: 0 2px 6px var(--btn-export-shadow);
+		}
+
+		.back-btn {
+			background: var(--btn-back-bg);
+			color: var(--btn-back-text);
+			text-decoration: none;
+		}
+
+		.back-btn:hover {
+			background: var(--btn-back-bg-hover);
+			box-shadow: 0 4px 12px var(--btn-back-shadow);
+			transform: translateY(-1px);
+		}
+
+		.back-btn:active {
+			transform: translateY(0);
+			box-shadow: 0 2px 6px var(--btn-back-shadow);
+		}
+
+		#tableContainer {
+			height: calc(100vh - 70px);
+			overflow: auto;
+			background: var(--bg-primary);
+		}
+
+		.dataTables_wrapper {
+			padding: 0 !important;
+		}
+
+		.dataTables_length {
+			display: none !important;
+		}
+
+		.dataTables_length label {
+			display: none !important;
+		}
+
+		.dataTables_filter {
+			padding: 10px 15px;
+		}
+
+		.dataTables_filter label {
+			color: var(--text-primary);
+		}
+
+		.dataTables_filter input {
+			background-color: var(--bg-secondary);
+			color: var(--text-primary);
+			border: 1px solid var(--border-color);
+			border-radius: 4px;
+			padding: 4px 8px;
+		}
+
+		/* Emphasize empty-table message */
+		/* Hide default DataTables empty message */
+		#meshdata td.dataTables_empty,
+		table.dataTable td.dataTables_empty {
+			display: none;
+		}
+
+		/* Custom large empty message outside table */
+		#emptyTableMessage {
+			display: none;
+			text-align: center;
+			padding: 60px 20px;
+			font-size: 3em;
+			font-weight: 700;
+			color: var(--text-secondary);
+			background-color: var(--bg-secondary);
+			border: 1px solid var(--border-color);
+			margin-top: 10px;
+		}
+
+		#emptyTableMessage.show {
+			display: block;
+		}
+
+		.dataTables_info {
+			padding: 8px 15px;
+			font-size: 11px;
+			color: var(--text-primary);
+		}
+
+		table#meshdata {
+			font-size: 10px;
+			border-collapse: collapse;
+			width: 100%;
+		}
+
+		#meshdata thead {
+			position: sticky;
+			top: 0;
+			background-color: var(--bg-primary);
+			z-index: 1000;
+		}
+
+		#meshdata thead th {
+			padding: 6px 8px;
+			line-height: 1.2;
+			height: auto;
+			font-weight: 600;
+			border-bottom: var(--border-header);
+			background-color: var(--bg-primary);
+			color: var(--text-primary);
+			text-align: left;
+			white-space: nowrap;
+			cursor: pointer;
+			user-select: none;
+			position: sticky;
+			top: 0;
+			z-index: 1000;
+		}
+
+		#meshdata thead th:hover {
+			background-color: var(--header-hover);
+		}
+
+		#meshdata tbody td {
+			padding: 4px 8px;
+			line-height: 1;
+			height: 14px;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			vertical-align: middle;
+			border-bottom: 1px solid var(--border-color);
+			color: var(--text-primary);
+		}
+
+		#meshdata tbody tr:hover {
+			background-color: var(--row-hover);
+		}
+
+		#meshdata a {
+			color: var(--link-color);
+			text-decoration: none;
+		}
+
+		#meshdata a:hover {
+			text-decoration: underline;
+			color: var(--link-hover);
+		}
+
+		/* Force narrow SSID column */
+		#meshdata th:nth-child(5),
+		#meshdata td:nth-child(5) {
+			width: 100px !important;
+			max-width: 100px !important;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		/* Tunnels column - right aligned */
+		#meshdata th:nth-child(6),
+		#meshdata td:nth-child(6) {
+			width: 50px !important;
+			text-align: right;
+		}
+
+		/* Narrow Model and Hardware to free space for Version */
+		#meshdata th:nth-child(7),
+		#meshdata td:nth-child(7),
+		#meshdata th:nth-child(8),
+		#meshdata td:nth-child(8) {
+			width: 80px !important;
+			max-width: 80px !important;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		/* Allow Version column to fully display */
+		#meshdata th:nth-child(9),
+		#meshdata td:nth-child(9) {
+			white-space: normal;
+			overflow: visible;
+			text-overflow: clip;
+		}
+
+		/* Make Response column narrow */
+		#meshdata th:nth-child(10),
+		#meshdata td:nth-child(10) {
+			width: 30px !important;
+			max-width: 30px !important;
+			text-align: right;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			padding: 2px 4px !important;
+		}
+
+		/* Hide sorting indicator on index column */
+		#meshdata thead th:first-child {
+			cursor: default !important;
+		}
+
+		#meshdata thead th:first-child::after {
+			display: none !important;
+		}
+
+		#meshdata thead th:first-child span {
+			display: none !important;
+		}
+
+		.dataTables_paginate {
+			padding: 8px 15px;
+		}
+
+		#firmwareFilter {
+			font-family: "Atkinson Hyperlegible Next", sans-serif;
+			font-size: 11px;
+			padding: 6px 12px;
+			border: 1px solid var(--border-color);
+			border-radius: 4px;
+			background-color: var(--bg-primary);
+			color: var(--text-primary);
+			cursor: pointer;
+		}
+
+	</style>
+</head>
+<body>
+	<header>
+		<div class="header-left">
+			<h1 id="pageTitle">Node Report</h1>
+			<select id="firmwareFilter">
+				<option value="" disabled selected hidden>Filter by Routing Protocol</option>
+				<option value="">All Nodes</option>
+				<option value="combo">Combo</option>
+				<option value="olsr">OLSR Only</option>
+				<option value="babel">Babel Only</option>
+			</select>
+			<button id="exportBtn">Export</button>
+		</div>
+		<a href="../" class="back-btn">← Back to Map</a>
+	</header>
+
+	<div id="tableContainer">
+		<table id="meshdata" class="display">
+			<thead>
+				<tr>
+					<th>#</th>
+					<th>Name</th>
+					<th>Description</th>
+					<th>Freq</th>
+					<th>SSID</th>
+					<th>Tunnels</th>
+					<th>Model</th>
+				<th>Hardware</th>
+				<th>Version</th>
+				<th>Response</th>
+				<th>Last Seen</th>
+				</tr>
+			</thead>
+			<tbody></tbody>
+		</table>
+		<div id="emptyTableMessage">No data available in table</div>
+	</div>
+
+	<!-- Scripts -->
+	<script src="js/jquery-3.7.1.js"></script>
+	<script src="js/datatables.min.js"></script>
+	<script src="js/dataTables.buttons.js"></script>
+	<script src="js/jszip.js"></script>
+	<script src="js/pdfmake.js"></script>
+	<script src="js/buttons.html5.js"></script>
+	<script src="js/dataTables.colReorder.js"></script>
+
+	<script>
+		document.addEventListener('DOMContentLoaded', function() {
+			const getProtoParam = () => {
+				const params = new URLSearchParams(window.location.search);
+				const proto = (params.get('proto') || '').toLowerCase();
+				return ['combo', 'olsr', 'babel'].includes(proto) ? proto : '';
+			};
+
+			const setProtoParam = (value) => {
+				const url = new URL(window.location.href);
+				if (value) {
+					url.searchParams.set('proto', value);
+				} else {
+					url.searchParams.delete('proto');
+				}
+				window.history.replaceState({}, '', url.toString());
+			};
+
+			// Fetch map info to get report titles
+			fetch('../data/map_data.json')
+				.then(response => response.json())
+				.then(data => {
+					const reportBrowserTitle = data.mapInfo?.reportBrowserTitle || 'Node Report';
+					const reportPageTitle = data.mapInfo?.reportPageTitle || 'Node Report';
+					document.title = reportBrowserTitle;
+					document.getElementById('pageTitle').textContent = reportPageTitle;
+				})
+				.catch(error => {
+					console.error('Error loading map data for titles:', error);
+					document.title = 'Node Report';
+					document.getElementById('pageTitle').textContent = 'Node Report';
+				});
+
+			// Helper functions for cell rendering with tooltips
+			const renderCellWithTooltip = (data) => {
+				if (!data) return '';
+				return `<span title="${data}">${data}</span>`;
+			};
+
+			const renderTruncatedCell = (data, maxLength) => {
+				if (!data) return '';
+				const truncated = data.length > maxLength ? data.substring(0, maxLength) + '…' : data;
+				return `<span title="${data}">${truncated}</span>`;
+			};
+
+			// Custom sort plugin: blanks always at end, regardless of sort direction
+			// This uses a different approach that leverages DataTables' row data
+			$.fn.dataTable.ext.type.order['nulls-last-pre'] = function(d) {
+				return d === '' ? '\uffff' : d;
+			};
+			
+			// Note: The secondary sort (Name column) is handled by DataTables' orderMulti setting
+			// Blanks will be grouped at the end and sorted by Name within that group
+			$.fn.dataTable.ext.type.order['nulls-last-asc'] = function(a, b) {
+				const aIsBlank = a === '\uffff';
+				const bIsBlank = b === '\uffff';
+				if (aIsBlank && bIsBlank) return 0;
+				if (aIsBlank) return 1;  // blanks to end
+				if (bIsBlank) return -1;
+				return a.localeCompare(b);
+			};
+			$.fn.dataTable.ext.type.order['nulls-last-desc'] = function(a, b) {
+				const aIsBlank = a === '\uffff';
+				const bIsBlank = b === '\uffff';
+				if (aIsBlank && bIsBlank) return 0;
+				if (aIsBlank) return 1;  // blanks always to end, even in desc
+				if (bIsBlank) return -1;
+				return b.localeCompare(a);  // reverse the comparison for descending
+			};
+
+			// Set initial firmware filter selection based on proto query param
+			const firmwareFilterEl = document.getElementById('firmwareFilter');
+			const initialProto = getProtoParam();
+			if (firmwareFilterEl) {
+				if (initialProto) {
+					firmwareFilterEl.value = initialProto;
+				} else {
+					firmwareFilterEl.value = '';  // Set to "All Nodes"
+				}
+			}
+
+			// Load node data statically
+			let allNodeData = [];
+			
+			// Fetch and filter data based on protocol parameter
+			const loadNodeData = async function() {
+				try {
+					const response = await fetch('../data/node_report_data.json');
+					const json = await response.json();
+					const dataset = Array.isArray(json) ? json : [];
+					const filtered = dataset.filter(row => row.model !== 'Not Available');
+					const proto = getProtoParam();
+					
+					if (proto === 'olsr') {
+						allNodeData = filtered.filter(row => (row.protocol || '').toLowerCase() === 'olsr only');
+					} else if (proto === 'babel') {
+						allNodeData = filtered.filter(row => (row.protocol || '').toLowerCase() === 'babel only');
+					} else if (proto === 'combo') {
+						allNodeData = filtered.filter(row => (row.protocol || '').toLowerCase() === 'combo');
+					} else {
+						allNodeData = filtered;
+					}
+					
+					// Clear and reload table with new data
+					table.clear().rows.add(allNodeData).draw();
+				} catch (error) {
+					console.error('Error loading node data:', error);
+				}
+			};
+
+			// Initialize DataTable with static data
+			const table = new DataTable('#meshdata', {
+				columns: [
+					{
+						data: null,
+						width: '40px',
+						sortable: false,
+						render: function(data, type, row, meta) {
+							// Return sequential index based on display order
+							return meta.row + 1;
+						}
+					},
+					{
+						data: 'node',
+						width: '140px',
+						render: function(data) {
+							if (!data) return '';
+							const nodeName = data.toLowerCase();
+							return `<a href="http://${nodeName}.local.mesh" target="_blank" title="${data}">${nodeName}</a>`;
+						}
+					},
+					{
+						data: 'description',
+						width: '250px',
+						render: (data) => renderTruncatedCell(data, 40)
+					},
+					{
+						data: 'freq',
+						width: '60px',
+						render: renderCellWithTooltip
+					},
+					{
+						data: 'ssid',
+						width: '60px',
+						noWrap: true,
+						render: (data) => renderTruncatedCell(data, 20)
+					},
+					{
+						data: 'active_tunnel_count',
+						width: '40px',
+						type: 'num',
+						render: function(data) {
+							if (!data || data === 0) return '';
+							return parseInt(data).toString();
+						}
+					},
+					{
+						data: 'model',
+						render: (data) => renderTruncatedCell(data, 30)
+					},
+					{
+						data: 'board_id',
+						render: (data) => renderTruncatedCell(data, 30)
+					},
+					{
+						data: 'firmware_version',
+						render: renderCellWithTooltip
+					},
+					{
+						data: 'response_time_ms',
+						type: 'num',
+						width: '30px',
+						render: function(data) {
+							if (!data || data === 0) return '';
+							return data.toString();
+						}
+					},
+					{
+						data: 'last_seen',
+						render: renderCellWithTooltip
+					}
+				],
+			colReorder: true,
+			order: [[1, 'asc']],
+			orderMulti: true,
+			pageLength: 500,
+			processing: true,
+			responsive: false,
+			orderClasses: false,
+			columnDefs: [
+					{
+						targets: '_all',
+						type: 'nulls-last',
+						orderable: true
+					}
+				],
+				rowCallback: function(row, data, displayIndex) {
+					// Update the index column with sequential line numbers
+					$(row).find('td:first').text(displayIndex + 1);
+				},
+				layout: {
+					topStart: null,
+					topEnd: null,
+					bottomStart: null,
+					bottomEnd: 'paging'
+				}
+			});
+
+			// Enforce binary sorting: toggle between ascending and descending only
+			let lastSortedColumn = 1; // Track the last sorted column (Name column by default)
+			let lastSortDirection = 'asc'; // Track the last sort direction
+			let isProcessingSort = false; // Flag to prevent recursive calls
+			let isInitialLoad = true; // Flag to identify initial page load
+
+			table.on('order.dt', function(e, settings) {
+				if (isProcessingSort) return; // Prevent recursive event handling
+				
+				const order = settings.aaSorting;
+				
+				// On initial load, just sync the tracking variables and return
+				if (isInitialLoad) {
+					isInitialLoad = false;
+					if (order.length > 0) {
+						lastSortedColumn = order[0][0];
+						lastSortDirection = order[0][1];
+					}
+					return;
+				}
+				
+				// Always ensure Name column (1) is the secondary sort key
+				const hasNameSecondary = order.length > 1 && order[1][0] === 1;
+				
+				if (order.length === 0) {
+					// If order is empty, revert to the last sort with Name as secondary
+					isProcessingSort = true;
+					table.order([[lastSortedColumn, lastSortDirection], [1, 'asc']]).draw(false);
+					isProcessingSort = false;
+				} else {
+					const currentColumn = order[0][0];
+					const currentDirection = order[0][1];
+					
+					// If the same column is clicked again, toggle direction
+					if (currentColumn === lastSortedColumn) {
+						const newDirection = lastSortDirection === 'asc' ? 'desc' : 'asc';
+						isProcessingSort = true;
+						table.order([[currentColumn, newDirection], [1, 'asc']]).draw(false);
+						isProcessingSort = false;
+						lastSortDirection = newDirection;
+					} else {
+						// New column clicked, start with ascending
+						lastSortedColumn = currentColumn;
+						lastSortDirection = 'asc';
+						if (currentDirection !== 'asc' || !hasNameSecondary) {
+							isProcessingSort = true;
+							table.order([[currentColumn, 'asc'], [1, 'asc']]).draw(false);
+							isProcessingSort = false;
+						} else {
+							// Just update tracking if already ascending with Name as secondary
+							lastSortDirection = 'asc';
+						}
+					}
+				}
+			});
+
+			// Update proto query param and reload table on firmware filter change
+			if (firmwareFilterEl) {
+				firmwareFilterEl.addEventListener('change', function() {
+					const value = this.value;
+					setProtoParam(value);
+					loadNodeData();
+				});
+			}
+
+			// Helper to show/hide custom empty message
+			const updateEmptyMessage = () => {
+				const emptyMsg = document.getElementById('emptyTableMessage');
+				const visibleRows = table.rows({ filter: 'applied' }).count();
+				if (visibleRows === 0) {
+					emptyMsg.classList.add('show');
+				} else {
+					emptyMsg.classList.remove('show');
+				}
+			};
+
+			// Update empty message on draw
+			table.on('draw', updateEmptyMessage);
+			updateEmptyMessage();
+
+			// Custom export button with CSV functionality
+			document.getElementById('exportBtn').addEventListener('click', function() {
+				const rows = [];
+				const headers = ['#', 'Name', 'Description', 'Freq', 'SSID', 'Tunnels', 'Model', 'Hardware', 'Version', 'Response', 'Last Seen'];
+				rows.push(headers.join('\t'));
+				let rowIndex = 1;
+
+				table.rows({ filter: 'applied' }).data().each(function(row) {
+					const rowData = [
+						rowIndex++,
+						row.node || '',
+						row.description || '',
+						row.freq || '',
+						row.ssid || '',
+						row.active_tunnel_count || '',
+						row.model || '',
+						row.board_id || '',
+						row.firmware_version || '',
+						row.response_time_ms ? `${row.response_time_ms} ms` : '',
+						row.last_seen || ''
+					];
+
+					rows.push(rowData.join('\t'));
+				});
+
+				const csv = rows.join('\n');
+				const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+				const link = document.createElement('a');
+				const url = URL.createObjectURL(blob);
+				link.setAttribute('href', url);
+				link.setAttribute('download', `meshmap-nodes-${new Date().toISOString().split('T')[0]}.csv`);
+				link.click();
+				URL.revokeObjectURL(url);
+			});
+
+			// Load initial data
+			loadNodeData();
+		});
+	</script>
+</body>
+</html>

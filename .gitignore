@@ -1,0 +1,6 @@
+# These are created by the poller
+frontend/data/map_data.json
+frontend/data/node_report_data.json
+
+# Python virtual environment
+backend/venv/

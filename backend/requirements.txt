@@ -1,0 +1,29 @@
+# Mesh Map Polling Daemon - Python Requirements
+
+# Async HTTP client for node polling
+aiohttp>=3.9.0
+
+# Database adapters
+aiomysql>=0.2.0      # MySQL/MariaDB async support
+aiosqlite>=0.19.0    # SQLite async support
+
+# Configuration parsing (built-in, but explicit for clarity)
+# configparser - included in Python standard library
+
+# JSON handling (built-in)
+# json - included in Python standard library
+
+# Logging (built-in)
+# logging - included in Python standard library
+
+# Signal handling (built-in)
+# signal - included in Python standard library
+
+# Type hints (built-in for Python 3.7+)
+# typing - included in Python standard library
+
+# Data classes (built-in for Python 3.7+)
+# dataclasses - included in Python standard library
+
+# Optional: For better performance
+uvloop>=0.19.0       # High-performance event loop (optional but recommended)

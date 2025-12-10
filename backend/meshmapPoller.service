@@ -1,0 +1,43 @@
+[Unit]
+Description=Mesh Map Polling Daemon
+Documentation=https://github.com/kg6wxc/meshmap
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=meshmap
+Group=meshmap
+WorkingDirectory=/srv/meshmap/backend
+Environment="PATH=/srv/meshmap/backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Use virtual environment Python
+ExecStart=/srv/meshmap/backend/venv/bin/python3 /srv/meshmap/backend/meshmapPoller.py
+
+# Restart configuration
+Restart=always
+RestartSec=5
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security hardening (adjust as needed for your environment)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/meshmap/backend /srv/meshmap/frontend/data
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=meshmapPoller.py
+
+# Graceful shutdown
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
