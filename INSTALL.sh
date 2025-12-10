@@ -57,30 +57,9 @@ DB_PASS="password"
 WEB_ROOT="/var/www/html"
 
 # Check repository access FIRST before any setup
-print_header "Verifying Repository Access"
-print_step "Checking SSH authentication to GitHub as $ACTUAL_USER..."
-
-CLONE_METHOD=""
-# Test SSH access without sudo to preserve SSH agent context
-if ssh -o BatchMode=yes -o ConnectTimeout=5 git@github.com &>/dev/null; then
-    print_success "SSH authentication verified"
-    CLONE_METHOD="ssh"
-else
-    print_step "SSH key not configured, checking if repository is public via HTTPS..."
-    if env GIT_TERMINAL_PROMPT=0 git ls-remote https://github.com/AI7BQ/nodographer.git &>/dev/null; then
-        print_success "Repository is public; HTTPS access available"
-        CLONE_METHOD="https"
-    else
-        print_error "Repository is private and SSH key is not configured"
-        echo ""
-        echo "To set up SSH authentication:"
-        echo "  1. Add your public key to GitHub: https://github.com/settings/keys"
-        echo "  2. Test SSH: ssh -T git@github.com"
-        echo "  3. Try installation again"
-        echo ""
-        exit 1
-    fi
-fi
+print_header "Repository Configuration"
+print_step "Repository is public (HTTPS), no SSH key required"
+CLONE_METHOD="https"
 
 echo ""
 echo "Installation Directory: $INSTALL_DIR"
