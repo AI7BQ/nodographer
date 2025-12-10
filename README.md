@@ -303,6 +303,7 @@ The frontend is accessed at `http://<server>/meshmap/` (after installation).
 ### Data Flow
 
 **First Run (Full Speed)**
+
 1. Fetch network topology from nodelistNode
 2. Build list of all nodes with hop counts
 3. Update database with topology
@@ -314,6 +315,7 @@ The frontend is accessed at `http://<server>/meshmap/` (after installation).
 9. Goto step 10
 
 **Subsequent Runs (Rate Limited)**
+
 10. Fetch network topology from nodelistNode
 11. Build list of all nodes with hop counts
 12. Update database with topology
