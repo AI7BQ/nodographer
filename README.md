@@ -45,27 +45,11 @@ sudo apt install -y python3 python3-venv python3-pip git mariadb-server nginx
 
 ### Clone the repository to your local drive
 
-**Public repository (HTTPS, no SSH key needed):**
 ```bash
 sudo mkdir -p /srv
 sudo chown "$USER":"$USER" /srv   # allow cloning into /srv as your user
 cd /srv
 git clone https://github.com/AI7BQ/nodographer.git meshmap
-```
-
-**Private repository (use your SSH key):**
-```bash
-sudo mkdir -p /srv
-sudo chown "$USER":"$USER" /srv   # allow cloning into /srv as your user
-cd /srv
-git clone git@github.com:AI7BQ/nodographer.git meshmap
-```
-
-If you need to set up your SSH key:
-```bash
-ssh-keygen -t ed25519 -C "your_email@example.com"
-cat ~/.ssh/id_ed25519.pub   # add this to GitHub SSH keys
-ssh -T git@github.com       # verify
 ```
 
 You now own the cloned application files as your user (`$USER`). The following steps set up the application for development and testing. Before deploying as a systemd service, you'll transfer ownership to the `meshmap` service user.
