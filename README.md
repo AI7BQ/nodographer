@@ -48,7 +48,7 @@ sudo apt install -y python3 python3-venv python3-pip git mariadb-server nginx
 
 ```bash
 sudo mkdir -p /srv
-sudo chown "$USER":"$USER" /srv   # allow cloning into /srv as your user
+sudo chown "$USER":"$USER" /srv
 cd /srv
 git clone https://github.com/AI7BQ/nodographer.git meshmap
 ```
@@ -57,9 +57,9 @@ git clone https://github.com/AI7BQ/nodographer.git meshmap
 
 You now own the cloned application files as your user (`$USER`). 
 
-### Scripted Method
+### In a Hurry?
 
-If you're in a hurry, run the following installation script
+Run the following installation script:
 ```bash
 sudo /srv/meshmap/INSTALL.sh
 ```
@@ -190,15 +190,16 @@ source venv/bin/activate
 sudo -u meshmap ./venv/bin/python3 meshmapPoller.py --once
 ```
 
-Verify that new files appear under `/srv/meshmap/frontend/data` and that the web page renders at `http://<hostname>.local.mesh/meshmap/`.
+Verify that two JSON files appear under `/srv/meshmap/frontend/data` and that the web page renders at `http://<hostname>.local.mesh/meshmap/`.
 
 **Note**: The smoke test runs as the `meshmap` user using `sudo -u`. This confirms permissions are set correctly before enabling the systemd service.
 
 ### Service management
 
 ```bash
-sudo systemctl status meshmapPoller.service
-sudo systemctl restart meshmapPoller.service
+sudo systemctl status meshmapPoller.service           # Start the poller
+sudo systemctl stop meshmapPoller.service             # Stop the poller
+sudo systemctl restart meshmapPoller.service          # Restart the poller
 sudo journalctl -u meshmapPoller.service -f           # Follow logs
 sudo journalctl -u meshmapPoller.service -p err       # Errors only
 ```
@@ -303,13 +304,26 @@ The frontend is accessed at `http://<server>/meshmap/` (after installation).
 
 ### Data Flow
 
+**First Run (Full Speed)**
 1. Fetch network topology from nodelistNode
 2. Build list of all nodes with hop counts
 3. Update database with topology
-4. Poll all nodes in parallel (rate-limited)
+4. Poll all nodes in parallel (no rate limiting)
 5. Calculate link distances and bearings
-6. Generate JSON data files for web interface
-7. Repeat (daemon mode only) or exit (once mode)
+6. Generate JSON data files for web interface and API
+7. If `--once` flag is set then exit
+8. Wait 10 minutes
+9. Goto step 10
+
+**Subsequent Runs (Rate Limited)**
+10. Fetch network topology from nodelistNode
+11. Build list of all nodes with hop counts
+12. Update database with topology
+13. Poll all nodes in parallel (rate limited)
+14. Calculate link distances and bearings
+15. Generate JSON data files for web interface and API
+16. Wait 10 minutes
+17. Goto step 10
 
 ## APIs and Data Files
 
