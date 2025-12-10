@@ -53,13 +53,11 @@ cd /srv
 git clone https://github.com/AI7BQ/nodographer.git meshmap
 ```
 
-### Quick Start
-
 You now own the cloned application files as your user (`$USER`). 
 
-### In a Hurry?
+### Quick Start
 
-Run the following installation script:
+In a hurry? Run the following installation script:
 ```bash
 sudo /srv/meshmap/INSTALL.sh
 ```
