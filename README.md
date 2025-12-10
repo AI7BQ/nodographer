@@ -6,7 +6,7 @@ An olsr/babel-compatible Python rewrite and derivative work of the original mesh
 
 ## Overview
 
-Nodographer is a complete mesh mapping system consisting of two integrated components:
+Nodographer is a mesh mapping web app and API consisting of two integrated components:
 
 - **Backend** (`meshmapPoller`): Python async daemon that polls AREDN nodes, collects network topology and node data, manages a relational database, and generates JSON data files. Runs as a systemd service with configurable polling intervals and supports both MySQL/MariaDB and SQLite.
   
