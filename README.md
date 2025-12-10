@@ -32,12 +32,13 @@ The entire project (source code, configuration, data files) lives in `/srv/meshm
 ### Prerequisites
 
 - Linux with `systemd` (developed and tested on Debian 13, works on any systemd-based distribution)
+- Linux user with sudo privileges
 - Web server serving `/var/www/html` (Nginx used for development and testing)
 - Python 3.10+ with `python3-venv` and `pip`
 - `git`
 - Database: MariaDB/MySQL (default) or SQLite
 
-**Install required Debian/Ubuntu packages:**
+**Install required packages:**
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip git mariadb-server nginx
@@ -52,7 +53,20 @@ cd /srv
 git clone https://github.com/AI7BQ/nodographer.git meshmap
 ```
 
-You now own the cloned application files as your user (`$USER`). The following steps set up the application for development and testing. Before deploying as a systemd service, you'll transfer ownership to the `meshmap` service user.
+### Quick Start
+
+You now own the cloned application files as your user (`$USER`). 
+
+### Scripted Method
+
+If you're in a hurry, run the following installation script
+```bash
+sudo /srv/meshmap/INSTALL.sh
+```
+
+### Manual Method
+
+The following steps configure the application for development and testing the same way as the INSTALL.sh shown above. Before deploying as a systemd service, you'll transfer ownership to the `meshmap` service user.
 
 ### Create dedicated system user
 
@@ -65,7 +79,7 @@ By running the poller as `meshmap` instead of `root` or `www-data`, we limit the
 - Cannot modify system files
 - Isolated from web server processes
 
-Create the system user (no shell access required):
+Create system user named `meshmap`. This user will not have shell access:
 ```bash
 sudo useradd -r -s /bin/false -d /srv/meshmap -c "MeshMap Poller Service" meshmap
 ```

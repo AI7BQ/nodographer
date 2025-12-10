@@ -56,11 +56,6 @@ DB_USER="mesh-map"
 DB_PASS="password"
 WEB_ROOT="/var/www/html"
 
-# Check repository access FIRST before any setup
-print_header "Repository Configuration"
-print_step "Repository is public (HTTPS), no SSH key required"
-CLONE_METHOD="https"
-
 echo ""
 echo "Installation Directory: $INSTALL_DIR"
 echo "Database Name: $DB_NAME"
@@ -106,24 +101,8 @@ if [ -d "$INSTALL_DIR" ]; then
     fi
 fi
 
-# Step 3: Clone repository
-print_header "Step 3: Cloning Repository"
-print_step "Creating $INSTALL_DIR directory..."
-mkdir -p /srv
-chown "$ACTUAL_USER":"$ACTUAL_USER" /srv
-cd /srv
-
-if [ "$CLONE_METHOD" = "ssh" ]; then
-    print_step "Cloning from GitHub using SSH as $ACTUAL_USER..."
-    sudo -u "$ACTUAL_USER" git clone -q git@github.com:AI7BQ/nodographer.git meshmap
-else
-    print_step "Cloning from GitHub using HTTPS as $ACTUAL_USER..."
-    sudo -u "$ACTUAL_USER" env GIT_TERMINAL_PROMPT=0 git clone -q https://github.com/AI7BQ/nodographer.git meshmap
-fi
-print_success "Repository cloned to $INSTALL_DIR"
-
-# Step 4: Create meshmap system user
-print_header "Step 4: Creating System User"
+# Step 3: Create meshmap system user
+print_header "Step 3: Creating System User"
 if id "meshmap" &>/dev/null; then
     print_step "User 'meshmap' already exists, skipping..."
 else
@@ -132,8 +111,8 @@ else
     print_success "System user 'meshmap' created"
 fi
 
-# Step 5: Setup Python virtual environment
-print_header "Step 5: Setting Up Python Virtual Environment"
+# Step 4: Setup Python virtual environment
+print_header "Step 4: Setting Up Python Virtual Environment"
 print_step "Transferring backend ownership to meshmap user..."
 chown -R meshmap:meshmap "$INSTALL_DIR/backend" "$INSTALL_DIR/.cache"
 
@@ -146,8 +125,8 @@ sudo -H -u meshmap venv/bin/pip install --upgrade pip -q
 sudo -H -u meshmap venv/bin/pip install -r requirements.txt -q
 print_success "Python virtual environment configured"
 
-# Step 6: Database setup
-print_header "Step 6: Setting Up Database"
+# Step 5: Database setup
+print_header "Step 5: Setting Up Database"
 print_step "Creating MariaDB database and user..."
 
 # Check if database exists
@@ -176,8 +155,8 @@ FLUSH PRIVILEGES;
 SQL
 print_success "Database configured (tables will be created automatically on first run)"
 
-# Step 7: Configure application
-print_header "Step 7: Configuring Application"
+# Step 6: Configure application
+print_header "Step 6: Configuring Application"
 print_step "Configuration file is at: $INSTALL_DIR/settings.ini"
 print_step "You may need to edit settings.ini to customize:"
 echo "  - nodelistNode (default: localnode.local.mesh)"
@@ -186,8 +165,8 @@ echo "  - Distance units (miles/kilometers)"
 echo "  - Database password (currently: $DB_PASS)"
 print_success "Configuration ready (edit $INSTALL_DIR/settings.ini as needed)"
 
-# Step 8: Setup web server
-print_header "Step 8: Configuring Web Server"
+# Step 7: Setup web server
+print_header "Step 7: Configuring Web Server"
 print_step "Creating symlink to web root..."
 ln -sf "$INSTALL_DIR/frontend" "$WEB_ROOT/meshmap"
 
@@ -196,16 +175,16 @@ chown -R meshmap:www-data "$INSTALL_DIR/frontend/data"
 chmod 775 "$INSTALL_DIR/frontend/data"
 print_success "Web server configured (http://<hostname>/meshmap/)"
 
-# Step 9: Transfer ownership for production
-print_header "Step 9: Setting Production Permissions"
+# Step 8: Transfer ownership for production
+print_header "Step 8: Setting Production Permissions"
 print_step "Transferring ownership to meshmap user..."
 chown -R meshmap:meshmap "$INSTALL_DIR/backend"
 chown -R meshmap:www-data "$INSTALL_DIR/frontend/data"
 chmod 775 "$INSTALL_DIR/frontend/data"
 print_success "Ownership configured for production"
 
-# Step 10: Install systemd service
-print_header "Step 10: Installing systemd Service"
+# Step 9: Install systemd service
+print_header "Step 9: Installing systemd Service"
 print_step "Creating systemd service symlink..."
 ln -sf "$INSTALL_DIR/backend/meshmapPoller.service" /etc/systemd/system/meshmapPoller.service
 
@@ -217,8 +196,8 @@ systemctl enable meshmapPoller.service
 systemctl start meshmapPoller.service
 print_success "Service installed and started"
 
-# Step 11: Verify installation
-print_header "Step 11: Verifying Installation"
+# Step 10: Verify installation
+print_header "Step 10: Verifying Installation"
 sleep 2  # Give service time to start
 
 if systemctl is-active --quiet meshmapPoller.service; then
