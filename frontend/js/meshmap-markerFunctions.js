@@ -2,6 +2,36 @@
  * part of KG6WXC meshmap
  * 2024 KG6WXC
  */
+
+/**
+ * Parse ISO 8601 UTC timestamp and convert to local Date for display.
+ * Handles formats: "2025-12-10T22:54:37Z" or "2025-12-10 22:54:37"
+ * @param {string} isoTimestamp - ISO 8601 UTC timestamp
+ * @returns {Date} JavaScript Date object in browser's local timezone
+ */
+function parseUTCTimestamp(isoTimestamp) {
+	// Handle empty or invalid input
+	if (!isoTimestamp) {
+		return new Date();
+	}
+	
+	// Ensure it's a string
+	if (typeof isoTimestamp !== 'string') {
+		return new Date();
+	}
+	
+	// Replace space with T for consistency (handle both formats)
+	var normalized = isoTimestamp.replace(' ', 'T');
+	
+	// Append Z if not present (indicates UTC)
+	if (!normalized.endsWith('Z')) {
+		normalized += 'Z';
+	}
+	
+	// Parse as UTC - JavaScript will automatically convert to local timezone
+	return new Date(normalized);
+}
+
 function createServiceList(list) {
 	var serviceList = "";
 	
@@ -100,7 +130,7 @@ function createLinkList(list) {
 function createDeviceMarkers(allDevices) {
 	for(var i = 0; i < allDevices['900'].length; i++) {
 		var band = "900";
-		var localTime = new Date(allDevices[band][i].last_seen + " UTC");
+		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
 		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
 			allDevices[band][i].node + ".local.mesh' target='_blank' rel='noopener'>" + allDevices[band][i].node + "</a></NodeTitle>" +
 			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
@@ -134,7 +164,7 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['2ghz'].length; i++) {
 		var band = "2ghz";
-		var localTime = new Date(allDevices[band][i].last_seen + " UTC");
+		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
 		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
 			allDevices[band][i].node + ".local.mesh' target='node'>" + allDevices[band][i].node + "</a></NodeTitle>" +
 			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
@@ -168,7 +198,7 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['3ghz'].length; i++) {
 		var band = "3ghz";
-		var localTime = new Date(allDevices[band][i].last_seen + " UTC");
+		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
 		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
 			allDevices[band][i].node + ".local.mesh' target='node'>" + allDevices[band][i].node + "</a></NodeTitle>" +
 			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
@@ -202,7 +232,7 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['5ghz'].length; i++) {
 		var band = "5ghz";
-		var localTime = new Date(allDevices[band][i].last_seen + " UTC");
+		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
 		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
 			allDevices[band][i].node + ".local.mesh' target='_blank' rel='noopener'>" + allDevices[band][i].node + "</a></NodeTitle>" +
 			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br><strong>SSID</strong>: " + allDevices[band][i].ssid +
@@ -236,7 +266,7 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['noRF'].length; i++) {
 		var band = "noRF";
-		var localTime = new Date(allDevices[band][i].last_seen + " UTC");
+		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
 		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
 			allDevices[band][i].node + ".local.mesh' target='node'>" + allDevices[band][i].node + "</a></NodeTitle>" +
 			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
@@ -265,8 +295,8 @@ function createDeviceMarkers(allDevices) {
 		createLinks(allDevices[band][i].node, allDevices[band][i].link_info, allDevices[band][i].lat, allDevices[band][i].lon, noRFLinks);
 	}
 	for(var i = 0; i < allDevices['supernode'].length; i++) {
-			var band = "supernode";
-			var localTime = new Date(allDevices[band][i].last_seen + " UTC");
+		var band = "supernode";
+		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
 			var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
 				allDevices[band][i].node + ".local.mesh' target='node'>" + allDevices[band][i].node + "</a></NodeTitle>" +
 				"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +

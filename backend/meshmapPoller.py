@@ -20,7 +20,7 @@ import os
 import argparse
 import logging
 from logging.handlers import SysLogHandler
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 import json
@@ -76,6 +76,59 @@ def _parse_last_seen(last_seen: Any) -> Optional[float]:
         except Exception:
             return None
     return None
+
+
+def _to_iso8601_utc(timestamp_value: Any) -> str:
+    """Convert a timestamp (returned in the server's local time) to ISO 8601 UTC.
+
+    MariaDB TIMESTAMP columns are stored as UTC but are returned to the session
+    in the session's timezone (commonly the host's local time). We normalize by:
+      1) parsing the local-time string/datetime
+      2) converting to a Unix timestamp (interpreted as local time)
+      3) emitting an explicit UTC ISO 8601 string with trailing Z
+    Returns empty string if conversion fails.
+    """
+
+    if not timestamp_value:
+        return ''
+
+    try:
+        # If it's already a datetime object (naive assumed local, aware handled)
+        if isinstance(timestamp_value, datetime):
+            if timestamp_value.tzinfo:
+                utc_dt = timestamp_value.astimezone(timezone.utc)
+            else:
+                ts = timestamp_value.timestamp()  # treat naive as local time
+                utc_dt = datetime.utcfromtimestamp(ts)
+            return utc_dt.replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        # If it's a string, parse it and convert to UTC
+        if isinstance(timestamp_value, str):
+            # Handle ISO strings with Z or offsets first
+            iso_val = timestamp_value
+            if iso_val.endswith('Z'):
+                iso_val = iso_val[:-1] + '+00:00'
+            if 'T' in iso_val and ('+' in iso_val[iso_val.find('T'):] or '-' in iso_val[iso_val.find('T'):]):
+                try:
+                    dt = datetime.fromisoformat(iso_val)
+                    utc_dt = dt.astimezone(timezone.utc)
+                    return utc_dt.replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
+                except ValueError:
+                    pass
+
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+                try:
+                    dt = datetime.strptime(timestamp_value, fmt)
+                    ts = dt.timestamp()  # interpret naive as local time
+                    utc_dt = datetime.utcfromtimestamp(ts)
+                    return utc_dt.replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
+                except ValueError:
+                    continue
+            return ''
+    except Exception:
+        return ''
+
+    return ''
 
 
 def _is_firmware(version: str, fw_type: str, version_cutoff: int, nightly_cutoff: int) -> bool:
@@ -1366,15 +1419,12 @@ class MeshPollingDaemon:
                 lon = node.get('lon', 0)
                 
                 # Build node data for reporting
-                # Convert datetime to string if needed
+                # Convert datetime to ISO 8601 UTC string
                 last_seen_raw = node.get('last_seen', '')
                 protocol = self._determine_protocol(node.get('firmware_version', ''), last_seen_raw)
 
-                last_seen = last_seen_raw
-                if last_seen and hasattr(last_seen, 'strftime'):
-                    last_seen = last_seen.strftime('%Y-%m-%d %H:%M:%S')
-                elif last_seen is None:
-                    last_seen = ''
+                # Convert to ISO 8601 UTC format for frontend
+                last_seen = _to_iso8601_utc(last_seen_raw)
                 
                 # Deserialize link_info from pickle if it's stored as hex string
                 link_info_data = {}
@@ -1622,7 +1672,7 @@ class MeshPollingDaemon:
             
             map_info = {
                 'localnode': self.nodelistNode,
-                'lastUpdate': datetime.now().isoformat(),
+                'lastUpdate': datetime.utcnow().replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ'),
                 'mapTileServers': map_tile_servers,
                 'defaultTileServer': default_tile_server,
                 'title': self.config.get('user-settings', 'map_browserTitle', 'MeshMap'),

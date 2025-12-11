@@ -325,6 +325,28 @@ The frontend is accessed at `http://<server>/meshmap/` (after installation).
 16. Wait 10 minutes
 17. Goto step 10
 
+### Timezone Handling
+
+Nodographer uses a **"Store UTC, Display Local"** architecture that works seamlessly with any server timezone:
+
+- **Database**: MariaDB `TIMESTAMP` columns store all times internally as UTC (standard SQL behavior)
+- **Backend**: `meshmapPoller.py` converts all timestamps to ISO 8601 UTC format (`YYYY-MM-DDTHH:MM:SSZ`) when writing JSON files
+- **Frontend**: JavaScript's `parseUTCTimestamp()` function parses the ISO 8601 UTC timestamp and JavaScript automatically converts it to the **operator's browser local timezone** for display
+
+**Key Benefits**:
+- ✅ Works globally—operators in any timezone (UTC, PST, IST, JST, etc.) see times in their local timezone automatically
+- ✅ No configuration needed—timezone detection is automatic via the browser
+- ✅ Portable data—timestamps remain independent of server location
+- ✅ Works with any host system timezone—the server can be set to UTC or local time
+
+**Example**: 
+- Database stores: `2025-12-10 22:54:37` (always UTC internally)
+- JSON output: `2025-12-10T22:54:37Z` (ISO 8601 UTC format)
+- Browser in Tokyo (UTC+9): Displays as `2025-12-11 07:54:37` 
+- Browser in Los Angeles (UTC-8): Displays as `2025-12-10 14:54:37`
+
+This approach is industry-standard (AWS, Google Cloud, Azure all use UTC internally) and requires no additional configuration from the administrator.
+
 ## APIs and Data Files
 
 ### Generated JSON Data Files
