@@ -311,19 +311,17 @@ The frontend is accessed at `http://<server>/meshmap/` (after installation).
 5. Calculate link distances and bearings
 6. Generate JSON data files for web interface and API
 7. If `--once` flag is set then exit
-8. Wait 10 minutes
-9. Goto step 10
+8. Goto step 9
 
 **Subsequent Runs (Rate Limited)**
 
-10. Fetch network topology from nodelistNode
-11. Build list of all nodes with hop counts
-12. Update database with topology
-13. Poll all nodes in parallel (rate limited)
-14. Calculate link distances and bearings
-15. Generate JSON data files for web interface and API
-16. Wait 10 minutes
-17. Goto step 10
+ 9. Fetch network topology from nodelistNode
+10. Build list of all nodes with hop counts
+11. Update database with topology
+12. Poll all nodes in parallel (rate limited)
+13. Calculate link distances and bearings
+14. Generate JSON data files for web interface and API
+15. Goto step 9
 
 ### Timezone Handling
 
