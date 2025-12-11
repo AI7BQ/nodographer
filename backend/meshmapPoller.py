@@ -801,7 +801,8 @@ class MeshPollingDaemon:
         # Polling configuration
         self.nodelistNode = self.config.get('user-settings', 'nodelistNode', 'localnode.local.mesh')
         self.parallel_threads = self.config.getint('user-settings', 'numParallelThreads', 60)
-        self.poll_interval = 600  # 10 minutes in seconds
+        self.poller_cycle_minutes = self.config.getint('user-settings', 'pollerCycleTime', 30)
+        self.poller_cycle_seconds = max(self.poller_cycle_minutes * 60, 1)
         self.localnode_ip: Optional[str] = None
         self.initial_link_map: Dict[str, Dict] = {}
         
@@ -926,7 +927,10 @@ class MeshPollingDaemon:
                 await self._poll_cycle()
                 self.logger.info("Poll cycle complete, exiting")
             else:
-                self.logger.info(f"Running in daemon mode (polling every {self.poll_interval}s)")
+                self.logger.info(
+                    "Running in daemon mode: first cycle full speed, subsequent cycles "
+                    f"rate-limited across {self.poller_cycle_minutes} minutes"
+                )
                 await self._daemon_loop()
                 
         except Exception as e:
@@ -937,23 +941,10 @@ class MeshPollingDaemon:
     
     async def _daemon_loop(self):
         """Main daemon loop"""
-        while self.running:
+        while self.running and not self.shutdown_event.is_set():
             try:
                 # Run poll cycle
                 await self._poll_cycle()
-                
-                # Wait for next cycle or shutdown
-                self.logger.info(f"Waiting {self.poll_interval} seconds until next poll...")
-                try:
-                    await asyncio.wait_for(
-                        self.shutdown_event.wait(),
-                        timeout=self.poll_interval
-                    )
-                    # Shutdown event was set
-                    break
-                except asyncio.TimeoutError:
-                    # Normal timeout, continue to next cycle
-                    continue
                     
             except Exception as e:
                 self.logger.error(f"Error in poll cycle: {e}", exc_info=True)
@@ -987,7 +978,10 @@ class MeshPollingDaemon:
             self.logger.info(f"Polling {len(node_devices)} nodes at maximum speed ({self.parallel_threads} concurrent)...")
         else:
             self.parallel_threads = self.base_parallel_threads
-            self.logger.info(f"Polling {len(node_devices)} nodes with rate limiting ({self.parallel_threads} concurrent, spread over 9 minutes)...")
+            self.logger.info(
+                f"Polling {len(node_devices)} nodes with rate limiting ({self.parallel_threads} concurrent, "
+                f"spread over {self.poller_cycle_minutes} minutes)..."
+            )
         polled_nodes = await self._poll_all_nodes(node_devices)
 
         # Step 6: Calculate statistics
@@ -1186,13 +1180,14 @@ class MeshPollingDaemon:
         tasks: List[asyncio.Task] = []
         
         # Calculate delay between task creation for cycles after the first
-        # Spread polls evenly across 9 minutes (540 seconds)
         total_nodes = len(node_devices)
         if self.cycle_count > 1 and total_nodes > 0:
-            # Delay between each node poll startup to spread across 9 minutes
-            # This dynamically adjusts based on current network size
-            inter_poll_delay = 540.0 / total_nodes
-            self.logger.info(f"Spreading {total_nodes} nodes over 9 minutes: {inter_poll_delay:.3f}s between polls")
+            # Spread polls evenly across configured pollerCycleTime window
+            inter_poll_delay = self.poller_cycle_seconds / total_nodes
+            self.logger.info(
+                f"Spreading {total_nodes} nodes over {self.poller_cycle_minutes} minutes: "
+                f"{inter_poll_delay:.3f}s between polls"
+            )
         else:
             inter_poll_delay = 0.0
 
