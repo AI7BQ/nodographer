@@ -1,15 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Mesh Map Polling Daemon - Python Implementation
 
-This script polls AREDN mesh nodes, collects network topology,
-and stores the data for mapping visualization.
+LICENSE = """
+Nodographer -- A Babel-aware AREDN Mesh Network Map
+Copyright (C) 2025 John M. Simpson AI7BQ
 
-Original PHP implementation: KG6WXC 2016-2024
-Python daemon implementation: 2025
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
 
-Licensed under GPLv3 or later
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see https://www.gnu.org/licenses.
+
+This software is a significant modification of the original meshmap program
+written by KG6WXC. The major changes are the translation of the poller
+component from PHP to Python, allowing the map to display OLSR, and Babel
+nodes, and the Node Status report has been rewritten to provide a condensed
+tabular display.
 """
 
 import asyncio
@@ -901,12 +914,16 @@ class MeshPollingDaemon:
             # add_signal_handler not supported (e.g., on Windows); fall back silently
             signal.signal(signal.SIGINT, self._signal_handler)
             signal.signal(signal.SIGTERM, self._signal_handler)
-    
-    async def start(self):
+
+    async def start(self):           
         """Start the polling daemon"""
         self.logger.info("=" * 70)
         self.logger.info("Mesh Map Polling Daemon Starting")
         self.logger.info("=" * 70)
+
+        # Print GPL License
+        for line in LICENSE[1:-1].split('\n'):
+            print(f"LICENSE - {line}", flush=True)
         
         try:
             # Register signal handlers now that loop is running
