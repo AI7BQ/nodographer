@@ -9,7 +9,7 @@ Type=simple
 User=meshmap
 Group=meshmap
 WorkingDirectory=/srv/meshmap/backend
-Environment="PATH=/srv/meshmap/backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=/srv/meshmap/backend/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # Use virtual environment Python
 ExecStart=/srv/meshmap/backend/venv/bin/python3 /srv/meshmap/backend/meshmapPoller.py
@@ -28,6 +28,9 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/srv/meshmap/backend /srv/meshmap/frontend/data
+
+# Grant CAP_NET_RAW capability for MTR to create raw sockets
+AmbientCapabilities=CAP_NET_RAW
 
 # Logging
 StandardOutput=journal

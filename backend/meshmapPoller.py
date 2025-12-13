@@ -1157,8 +1157,8 @@ class MeshPollingDaemon:
             ip = node.get('ip')
             if not ip:
                 continue
-            # Default to 1 hop (direct neighbor); will be overridden by optional MTR hopCount feature.
-            hops = 1
+            # Default to 0 hops (unknown); will be overridden by optional MTR hopCount feature.
+            hops = 0
             if hops > max_hops:
                 max_hops = hops
             if node.get('is_localnode'):
@@ -1182,9 +1182,9 @@ class MeshPollingDaemon:
         try:
             import subprocess, shlex, re
             cmd = f"mtr -r -c 1 -n {shlex.quote(target_ip)}"
-            proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, text=True)
+            proc = subprocess.run(cmd, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, text=True)
             if proc.returncode != 0:
-                self.logger.debug(f"MTR failed for {target_ip}: returncode={proc.returncode}, stderr={proc.stderr[:200]}")
+                self.logger.error(f"MTR failed for {target_ip}: returncode={proc.returncode}, stderr={proc.stderr[:200]}")
                 return None
             lines = [l for l in proc.stdout.splitlines() if l.strip()]
             # Robustly parse hop lines, which typically start like "  1.|-- ip ..."
@@ -1215,11 +1215,10 @@ class MeshPollingDaemon:
         enabled = False
         try:
             # ConfigManager.get() auto-converts "true"/"false" strings to boolean
-            enabled = self.config.get('user-settings', 'hopCount', fallback=False)
-            if not isinstance(enabled, bool):
-                enabled = False
+            enabled = self.config.get('user-settings', 'enableHopCount', fallback=False)
+            self.logger.info(f"enableHopCount value: {enabled!r} (type: {type(enabled).__name__})")
         except Exception as e:
-            self.logger.warning(f"Failed to read hopCount setting: {e}")
+            self.logger.warning(f"Failed to read enableHopCount setting: {e}")
             enabled = False
         
         self.logger.info(f"Hop count measurement via MTR: {'enabled' if enabled else 'disabled'}")
@@ -1239,11 +1238,10 @@ class MeshPollingDaemon:
                     return
                 # Run blocking mtr in a thread to avoid blocking event loop
                 hop = await asyncio.to_thread(self._measure_hops_mtr, ip)
+                self.logger.debug(f"MTR result for {ip}: {hop}")
                 if hop is not None:
                     info['hopsAway'] = hop
-                else:
-                    # If MTR fails to determine hop count, set to 0
-                    info['hopsAway'] = 0
+                # If MTR fails, leave hopsAway at its default value (1 from topology)
 
         # Use same concurrency setting as polling
         node_count = len(node_devices)
