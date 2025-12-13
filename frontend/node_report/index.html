@@ -343,6 +343,11 @@
 			padding: 2px 4px !important;
 		}
 
+			.stale-last-seen {
+				color: #c0392b;
+				font-weight: 600;
+			}
+
 		/* Hide sorting indicator on index column */
 		#meshdata thead th:first-child {
 			cursor: default !important;
@@ -464,6 +469,37 @@
 				if (!data) return '';
 				const truncated = data.length > maxLength ? data.substring(0, maxLength) + '…' : data;
 				return `<span title="${data}">${truncated}</span>`;
+			};
+
+			const isOlderThanHours = (value, hours) => {
+				if (!value) return false;
+				const d = new Date(value);
+				if (Number.isNaN(d.getTime())) return false;
+				const diffMs = Date.now() - d.getTime();
+				return diffMs > hours * 60 * 60 * 1000;
+			};
+
+			const formatLastSeen = (value) => {
+				if (!value) return '';
+				const d = new Date(value);
+				if (Number.isNaN(d.getTime())) return value || '';
+				const year = d.getFullYear();
+				const month = String(d.getMonth() + 1).padStart(2, '0');
+				const day = String(d.getDate()).padStart(2, '0');
+				const hours24 = d.getHours();
+				const ampm = hours24 >= 12 ? 'PM' : 'AM';
+				const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+				const hours = String(hours12).padStart(2, '0');
+				const minutes = String(d.getMinutes()).padStart(2, '0');
+				const seconds = String(d.getSeconds()).padStart(2, '0');
+				return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} ${ampm}`;
+			};
+
+			const renderLastSeen = (data) => {
+				const formatted = formatLastSeen(data);
+				if (!formatted) return '';
+				const staleClass = isOlderThanHours(data, 2) ? 'stale-last-seen' : '';
+				return `<span class="${staleClass}" title="${data || ''}">${formatted}</span>`;
 			};
 
 			// Custom sort plugin: blanks always at end, regardless of sort direction
@@ -609,7 +645,7 @@
 					},
 					{
 						data: 'last_seen',
-						render: renderCellWithTooltip
+						render: renderLastSeen
 					}
 				],
 			colReorder: true,
@@ -738,7 +774,7 @@
 						row.firmware_version || '',
 						row.response_time_ms ? `${row.response_time_ms} ms` : '',
 						row.hopsAway || '',
-						row.last_seen || ''
+						formatLastSeen(row.last_seen)
 					];
 
 					rows.push(rowData.join('\t'));

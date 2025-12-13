@@ -416,6 +416,7 @@ class MySQLAdapter:
                 link_info_insert = node_data.link_info if node_data.link_info else None
                 link_info_update = node_data.link_info if node_data.link_info else None
                 loadavg = node_data.loadavg if node_data.loadavg else ""
+                last_seen_val = node_data.last_seen if node_data.last_seen else None
 
                 # Round lat/lon to 7 decimal places to avoid truncation warnings
                 if node_data.lat is not None:
@@ -439,7 +440,7 @@ class MySQLAdapter:
                         meshRF, last_seen, antGain, antBeam, antDesc, antBuiltin, response_time_ms
                     ) VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(),
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s
                     ) ON DUPLICATE KEY UPDATE
                         node=%s, uptime=%s, loadavg=%s, model=%s, firmware_version=%s,
@@ -448,7 +449,7 @@ class MySQLAdapter:
                         api_version=%s, board_id=%s, firmware_mfg=%s, grid_square=%s,
                         lan_ip=%s, services=%s, description=%s, mesh_supernode=%s,
                         mesh_gateway=%s, freq=%s, link_info=COALESCE(%s, link_info), hopsAway=%s,
-                        meshRF=%s, last_seen=NOW(), antGain=%s, antBeam=%s,
+                        meshRF=%s, last_seen=%s, antGain=%s, antBeam=%s,
                         antDesc=%s, antBuiltin=%s, response_time_ms=%s
                 """
 
@@ -462,7 +463,7 @@ class MySQLAdapter:
                     node_data.lan_ip, services, node_data.description,
                     node_data.mesh_supernode, node_data.mesh_gateway, node_data.freq,
                     link_info_insert, node_data.hopsAway, node_data.meshRF,
-                    node_data.antGain, node_data.antBeam, node_data.antDesc,
+                    last_seen_val, node_data.antGain, node_data.antBeam, node_data.antDesc,
                     node_data.antBuiltin, node_data.response_time_ms,
                     node_data.node, node_data.uptime, loadavg, node_data.model,
                     node_data.firmware_version, node_data.ssid, node_data.channel,
@@ -473,7 +474,7 @@ class MySQLAdapter:
                     node_data.lan_ip, services, node_data.description,
                     node_data.mesh_supernode, node_data.mesh_gateway, node_data.freq,
                     link_info_update, node_data.hopsAway, node_data.meshRF,
-                    node_data.antGain, node_data.antBeam, node_data.antDesc,
+                    last_seen_val, node_data.antGain, node_data.antBeam, node_data.antDesc,
                     node_data.antBuiltin, node_data.response_time_ms
                 )
 
@@ -614,6 +615,7 @@ class NodePoller:
     async def poll_node(self, ip: str, hops: int = 0) -> Optional[NodeInfo]:
         """Poll a single node and return its information"""
         start_time = time.time()
+        poll_time = datetime.now(timezone.utc)
         
         # Prefer modern /a/sysinfo, but fall back to legacy cgi-bin for compatibility
         sysinfo_candidates = [
@@ -638,6 +640,7 @@ class NodePoller:
             node_info.hopsAway = hops
             node_info.band = self.check_band(node_info.channel, node_info.board_id)
             node_info.response_time_ms = round((time.time() - start_time) * 1000, 2)
+            node_info.last_seen = poll_time
             
             # Fetch link_info separately for each node (modern first, legacy fallback)
             link_candidates = [
