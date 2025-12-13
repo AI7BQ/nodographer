@@ -332,6 +332,17 @@
 			padding: 2px 4px !important;
 		}
 
+		/* Make Hops column narrow */
+		#meshdata th:nth-child(11),
+		#meshdata td:nth-child(11) {
+			width: 30px !important;
+			max-width: 30px !important;
+			text-align: right;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			padding: 2px 4px !important;
+		}
+
 		/* Hide sorting indicator on index column */
 		#meshdata thead th:first-child {
 			cursor: default !important;
@@ -392,6 +403,7 @@
 				<th>Hardware</th>
 				<th>Version</th>
 				<th>Response</th>
+				<th>Hops</th>
 				<th>Last Seen</th>
 				</tr>
 			</thead>
@@ -587,6 +599,15 @@
 						}
 					},
 					{
+						data: 'hopsAway',
+						type: 'num',
+						width: '30px',
+						render: function(data) {
+							if (!data || data === 0) return '';
+							return data.toString();
+						}
+					},
+					{
 						data: 'last_seen',
 						render: renderCellWithTooltip
 					}
@@ -700,7 +721,7 @@
 			// Custom export button with CSV functionality
 			document.getElementById('exportBtn').addEventListener('click', function() {
 				const rows = [];
-				const headers = ['#', 'Name', 'Description', 'Freq', 'SSID', 'Tunnels', 'Model', 'Hardware', 'Version', 'Response', 'Last Seen'];
+				const headers = ['#', 'Name', 'Description', 'Freq', 'SSID', 'Tunnels', 'Model', 'Hardware', 'Version', 'Response', 'Hops', 'Last Seen'];
 				rows.push(headers.join('\t'));
 				let rowIndex = 1;
 
@@ -716,6 +737,7 @@
 						row.board_id || '',
 						row.firmware_version || '',
 						row.response_time_ms ? `${row.response_time_ms} ms` : '',
+						row.hopsAway || '',
 						row.last_seen || ''
 					];
 

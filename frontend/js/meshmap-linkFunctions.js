@@ -92,8 +92,8 @@ function linkColorRF_quality(value) {
 
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
 						{color: linkColor, opacity: 0.8, weight: 2, offset: 2}).bindPopup(
-						"<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-						" TX rate: " + objArray[i][1].tx_rate + distance +"</div>").addTo(layer);
+						"<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+						"</a></strong> TX rate: " + objArray[i][1].tx_rate + distance +"</div>").addTo(layer);
 
 				}
 				if(linkMetric === "Tput") {
@@ -101,8 +101,8 @@ function linkColorRF_quality(value) {
 
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
 						{color: linkColor, opacity: 0.8, weight: 2, offset: 2}).bindPopup(
-						"<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-						" Expected Throughput: " + objArray[i][1].expected_throughput + distance +"</div>").addTo(layer);
+						"<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+						"</a></strong> Expected Throughput: " + objArray[i][1].expected_throughput + distance +"</div>").addTo(layer);
 
 				}
 				if(linkMetric === "SnR") {
@@ -112,23 +112,23 @@ function linkColorRF_quality(value) {
 					SnR = SnR * -1;
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
 						{color: linkColor, opacity: 0.8, weight: 2, offset: 2}).bindPopup(
-						"<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-						" SnR:" + SnR + " sig: " + objArray[i][1].signal + " noise: " + objArray[i][1].noise + distance + "</div>").addTo(layer);
+						"<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+						"</a></strong> SnR:" + SnR + " sig: " + objArray[i][1].signal + " noise: " + objArray[i][1].noise + distance + "</div>").addTo(layer);
 				}
 				if(linkMetric === "cost") {
 					linkColor = (linkColorRF_cost(objArray[i][1].linkCost));
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
                                                 {color: linkColor, opacity: 0.8, weight: 2, offset: 2}).bindPopup(
-                                                "<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-                                                " Link Cost: " + objArray[i][1].linkCost + distance + "</div>").addTo(layer);
+                                                "<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+                                                "</a></strong> Link Cost: " + objArray[i][1].linkCost + distance + "</div>").addTo(layer);
 				}
 
 				if(linkMetric === "qual") {
 					linkColor = (linkColorRF_quality(objArray[i][1].linkQuality));
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
                                                 {color: linkColor, opacity: 0.8, weight: 2, offset: 2}).bindPopup(
-                                                "<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-                                                " Link Quality: " + objArray[i][1].linkQuality + distance + "</div>").addTo(layer);
+                                                "<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+                                                "</a></strong> Link Quality: " + objArray[i][1].linkQuality + distance + "</div>").addTo(layer);
 				}
 
 /*
@@ -162,13 +162,13 @@ function linkColorRF_quality(value) {
 				if(linkMetric === "supernode") {
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
 										{color: linkColor, opacity: 0.5, weight: 2, offset: 2}).bindPopup(
-					                                                "<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-					                                                " DTD</div>").addTo(superNodeLinks);
+						                                                "<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+						                                                "</a></strong> DTD</div>").addTo(superNodeLinks);
 				}else {
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
-										{color: linkColor, opacity: 0.5, weight: 2, offset: 2}).bindPopup(
-					                                                "<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-					                                                " DTD</div>").addTo(noRFLinks);
+											{color: linkColor, opacity: 0.5, weight: 2, offset: 2}).bindPopup(
+						                                                "<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+						                                                "</a></strong> DTD</div>").addTo(noRFLinks);
 				}
 			}
 		}
@@ -186,13 +186,13 @@ function linkColorRF_quality(value) {
 				if(linkMetric === "supernode") {
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
 										{color: linkColor, opacity: 0.5, weight: 2, offset: 2}).bindPopup(
-					                                                "<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-					                                                " TUN</div>").addTo(superNodeLinks);
+						                                                "<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+						                                                "</a></strong> TUN</div>").addTo(superNodeLinks);
 				}else {
 					L.polyline([[parseFloat(nodeLat), parseFloat(nodeLon)],[parseFloat(objArray[i][1].linkLat), parseFloat(objArray[i][1].linkLon)]],
-										{color: linkColor, opacity: 0.5, weight: 2, offset: 2}).bindPopup(
-					                                                "<div class='linkPopupContent'><strong>" + objArray[i][1].hostname + "</strong> to <strong>" + node +
-					                                                " TUN</div>").addTo(noRFLinks);
+											{color: linkColor, opacity: 0.5, weight: 2, offset: 2}).bindPopup(
+						                                                "<div class='linkPopupContent'><strong><a href='http://" + objArray[i][1].hostname.toLowerCase() + ".local.mesh' target='_blank'>" + objArray[i][1].hostname.toLowerCase() + "</a></strong> to <strong><a href='http://" + node.toLowerCase() + ".local.mesh' target='_blank'>" + node.toLowerCase() +
+						                                                "</a></strong> TUN</div>").addTo(noRFLinks);
 				}
 			}
 		}

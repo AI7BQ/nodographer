@@ -286,7 +286,35 @@ The frontend is accessed at `http://<server>/meshmap/` (after installation).
 - **Map View**: Interactive Leaflet map showing nodes and links
 - **Layer Control**: Toggle between AREDN and Internet tile servers
 - **Search**: Find nodes by name or IP
+- **Node Info**: Click on nodes to view details
 - **Node Report**: Detailed statistics and filtering via `node_report/`
+
+## Node Info
+While viewing the map, click on any node circle to view details for that node. On the info tab you will find links to the various system information files.
+
+### Combo OLSR/Babel Endpoints ###
+
+- **Prometheus Metrics**: http://<node>/cgi-bin/metrics
+- **System Information**: http://<node>/cgi-bin/sysinfo.json
+- **Hosts**: http://<node>/cgi-bin/sysinfo.json?hosts=1
+- **Services**: http://<node>/cgi-bin/sysinfo.json?services=1
+- **Local Services**: http://<node>/cgi-bin/sysinfo.json?services_local=1
+- **Link Information**: http://<node>/cgi-bin/sysinfo.json?link_info=1
+- **Link Quality Manager**: http://<node>/cgi-bin/sysinfo.json?lqm=1
+- **Nodes**: http://<node>/cgi-bin/sysinfo.json?nodes=1
+- **Topology**: http://<node>/cgi-bin/sysinfo.json?topology=1
+
+### Babel Only Endpoints ###
+
+- **Prometheus Metrics**: http://<node>/cgi-bin/metrics
+- **System Information**: http://<node>/a/sysinfo
+- **Hosts**: http://<node>/a/sysinfo?hosts=1
+- **Services**: http://<node>/a/sysinfo?services=1
+- **Local Services**: http://<node>/a/sysinfo?services_local=1
+- **Link Information**: http://<node>/a/sysinfo?link_info=1
+- **Link Quality Manager**: http://<node>/a/sysinfo?lqm=1
+- **Nodes**: http://<node>/a/sysinfo?nodes=1
+- **Topology**: http://<node>/a/sysinfo?topology=1
 
 ## Architecture
 
@@ -294,34 +322,28 @@ The frontend is accessed at `http://<server>/meshmap/` (after installation).
 
 - **`ConfigManager`**: Configuration loading and validation
 - **`NodeInfo`**: Data class for node state
-- **`DatabaseAdapter`**: Abstract base for async DB operations
-  - `MySQLAdapter`: MySQL/MariaDB implementation
-  - `SQLiteAdapter`: SQLite implementation
+- **`DatabaseAdapter`**: Abstract base for async DB operations**
+- **`MySQLAdapter`**: MySQL/MariaDB implementation
+- **`SQLiteAdapter`**: SQLite implementation
 - **`NodePoller`**: Individual node HTTP polling
 - **`MeshPollingDaemon`**: Main coordinator for all polling operations
 
 ### Data Flow
+When meshmapPoller is started (or launched with the --once flag), the first pass for both MTR probing and node data fetching is performed at full speed in parallel. Subsequent passes are rate limited to reduce bursts of network traffic.
 
-**First Run (Full Speed)**
+***Determine Hop Count to Each Node*** 
+ 1. Fetch network topology from localnode.local.mesh
+ 2. Add new nodes to the database
+ 3. Delete old nodes from the database
+ 4. Concurrently execute lightweight MTR test to all nodes in the database
+ 5. Update database with results
 
-1. Fetch network topology from nodelistNode
-2. Build list of all nodes with hop counts
-3. Update database with topology
-4. Poll all nodes in parallel (no rate limiting)
-5. Calculate link distances and bearings
-6. Generate JSON data files for web interface and API
-7. If `--once` flag is set then exit
-8. Goto step 9
-
-**Subsequent Runs (Rate Limited)**
-
- 9. Fetch network topology from nodelistNode
-10. Build list of all nodes with hop counts
-11. Update database with topology
-12. Poll all nodes in parallel (rate limited)
-13. Calculate link distances and bearings
-14. Generate JSON data files for web interface and API
-15. Goto step 9
+***Fetch JSON Data from Each Node***
+ 6. Concurrently fetch JSON data from all nodes in the database
+ 7. Update database with results
+ 8. Generate JSON data files for frontend and API
+ 9. If `--once` flag is set then exit
+10. Goto step 1
 
 ### Timezone Handling
 

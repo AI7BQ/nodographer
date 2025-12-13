@@ -4,6 +4,74 @@
  */
 
 /**
+ * Generate sysinfo URL based on node protocol type.
+ * @param {string} nodeName - Node hostname
+ * @param {string} protocol - Protocol type: "Babel Only", "OLSR Only", "Combo", or "Unknown"
+ * @param {string} queryParams - Query parameters (e.g., "?hosts=1")
+ * @returns {string} Complete URL for the sysinfo endpoint
+ */
+function getSysinfoUrl(nodeName, protocol, queryParams) {
+	queryParams = queryParams || '';
+	var baseUrl = 'http://' + nodeName + '.local.mesh';
+	
+	// Babel Only nodes use /a/sysinfo
+	if (protocol === 'Babel Only') {
+		return baseUrl + '/a/sysinfo' + queryParams;
+	}
+	
+	// OLSR and Combo nodes use /cgi-bin/sysinfo.json
+	// Default to this format if protocol is Unknown or unrecognized
+	return baseUrl + '/cgi-bin/sysinfo.json' + queryParams;
+}
+
+/**
+ * Generate complete popup HTML for a node marker.
+ * @param {Object} device - Node device object with all properties
+ * @param {Object} options - Optional settings
+ * @param {boolean} options.showFreq - Whether to show frequency in MHz (default: true)
+ * @param {string} options.hopSource - Reference node for hop count (default: 'ai7bq-eugene-main')
+ * @returns {string} Complete HTML for popup with tabs (Main, Services, Links, Info)
+ */
+function createNodePopup(device, options) {
+	options = options || {};
+	var showFreq = options.showFreq !== false; // default true
+	var hopSource = options.hopSource || 'ai7bq-eugene-main';
+	
+	var localTime = parseUTCTimestamp(device.last_seen);
+	
+	// Build channel info (with or without frequency)
+	var channelInfo = 'Channel: ' + device.channel;
+	if (showFreq && device.freq) {
+		channelInfo += ' (' + device.freq + 'MHz)';
+	}
+	channelInfo += ' , Bandwidth: ' + device.chanbw;
+	
+	return "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
+		device.node + ".local.mesh' target='_blank' rel='noopener'>" + device.node + "</a></NodeTitle>" +
+		"<br>" + device.lat + ", " + device.lon + "<br>" + device.ssid +
+		"<br>" + channelInfo +
+		"<br>" + device.model + "<br>Firmware: " + device.firmware_version +
+		"<br>Antenna: " + device.antDesc + " Gain: " + device.antGain + " Beam: " + device.antBeam + "&deg;" +
+		"<br>Last Polled: " + localTime.toLocaleString() + "<br>Uptime: " + device.uptime +
+		"<br>Load Avg: 1min " + device.loadavg[0] + ", 5min " + device.loadavg[1] + ", 15min " + device.loadavg[2] +
+		"<br>" + device.hopsAway + " hops away from " + hopSource + "</div></div>" +
+		"<div class='popupTab' id='popupTab-Services'><div class='popupTabContent'><br>" + createServiceList(device.services) + "</div></div>" +
+		"<div class='popupTab' id='popupTab-Links'><div class='popupTabContent'><br>" + createLinkList(device.link_info) + "</div></div>" +
+		"<div class='popupTab' id='popupTab-Info'><div class='popupTabContent'><br><a href='http://" + device.node + ".local.mesh/cgi-bin/metrics' target='_blank'>Prometheus Metrics</a><br>" +
+		"<a href='" + getSysinfoUrl(device.node, device.protocol, '') + "' target='_blank'>System Information</a><br>" +
+		"<a href='" + getSysinfoUrl(device.node, device.protocol, '?hosts=1') + "' target='_blank'>Hosts</a><br>" +
+		"<a href='" + getSysinfoUrl(device.node, device.protocol, '?services=1') + "' target='_blank'>Services</a><br>" +
+		"<a href='" + getSysinfoUrl(device.node, device.protocol, '?services_local=1') + "' target='_blank'>Local Services</a><br>" +
+		"<a href='" + getSysinfoUrl(device.node, device.protocol, '?link_info=1') + "' target='_blank'>Link Info</a><br>" +
+		"<a href='" + getSysinfoUrl(device.node, device.protocol, '?lqm=1') + "' target='_blank'>Link Quality Manager</a><br>" +
+		"<a href='" + getSysinfoUrl(device.node, device.protocol, '?nodes=1') + "' target='_blank'>Nodes</a><br>" +
+		"<a href='" + getSysinfoUrl(device.node, device.protocol, '?topology=1') + "' target='_blank'>Topology</a></div></div>" +
+		"<ul class='popupTabs-link'><li class='popupTab-link'><a href='#popupTab-Main'><span>Main</span></a></li><li class='popupTab-link'>" +
+		"<a href='#popupTab-Services'><span>Services</span></a></li><li class='popupTab-link''><a href='#popupTab-Links'><span>Links</span></a></li><li class='popupTab-link'><a href='#popupTab-Info'><span>Info</span></a></li></ul>" +
+		"</div>";
+}
+
+/**
  * Parse ISO 8601 UTC timestamp and convert to local Date for display.
  * Handles formats: "2025-12-10T22:54:37Z" or "2025-12-10 22:54:37"
  * @param {string} isoTimestamp - ISO 8601 UTC timestamp
@@ -130,21 +198,7 @@ function createLinkList(list) {
 function createDeviceMarkers(allDevices) {
 	for(var i = 0; i < allDevices['900'].length; i++) {
 		var band = "900";
-		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
-		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
-			allDevices[band][i].node + ".local.mesh' target='_blank' rel='noopener'>" + allDevices[band][i].node + "</a></NodeTitle>" +
-			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
-			"<br>Channel: " + allDevices[band][i].channel + " (" + allDevices[band][i].freq + "MHz) , Bandwidth: " + allDevices[band][i].chanbw +
-			"<br>" + allDevices[band][i].model + "<br>Firmware: " + allDevices[band][i].firmware_version +
-			"<br>Antenna: " + allDevices[band][i].antDesc + " Gain: " + allDevices[band][i].antGain + " Beam: " + allDevices[band][i].antBeam + "&deg;" +
-			"<br>Last Polled: " + localTime.toLocaleString() + "<br>Uptime: " + allDevices[band][i].uptime +
-			"<br>Load Avg: 1min " + allDevices[band][i].loadavg[0] + ", 5min " + allDevices[band][i].loadavg[1] + ", 15min " + allDevices[band][i].loadavg[2] +
-			"<br>" + allDevices[band][i].hopsAway + " hops away from map polling system</div></div>" +
-			"<div class='popupTab' id='popupTab-Services'><div class='popupTabContent'><br>" + createServiceList(allDevices[band][i].services) + "</div></div>" +
-			"<div class='popupTab' id='popupTab-Links'><div class='popupTabContent'><br>" + createLinkList(allDevices[band][i].link_info) + "</div></div>" +
-			"<ul class='popupTabs-link'><li class='popupTab-link'><a href='#popupTab-Main'><span>Main</span></a></li><li class='popupTab-link'>" +
-			"<a href='#popupTab-Services'><span>Services</span></a></li><li class='popupTab-link''><a href='#popupTab-Links'><span>Links</span></a></li></ul>" +
-			"</div>";
+		var popup = createNodePopup(allDevices[band][i]);
 		if(mapInfo['localnode'] == allDevices[band][i].node) {
 			oms.addMarker(L.marker([allDevices[band][i].lat, allDevices[band][i].lon], {
 						icon: pulse9,
@@ -164,21 +218,7 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['2ghz'].length; i++) {
 		var band = "2ghz";
-		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
-		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
-			allDevices[band][i].node + ".local.mesh' target='node'>" + allDevices[band][i].node + "</a></NodeTitle>" +
-			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
-			"<br>Channel: " + allDevices[band][i].channel + " (" + allDevices[band][i].freq + "MHz) , Bandwidth: " + allDevices[band][i].chanbw +
-			"<br>" + allDevices[band][i].model + "<br>Firmware: " + allDevices[band][i].firmware_version +
-			"<br>Antenna: " + allDevices[band][i].antDesc + " Gain: " + allDevices[band][i].antGain + " Beam: " + allDevices[band][i].antBeam + "&deg;" +
-			"<br>Last Polled: " + localTime.toLocaleString() + "<br>Uptime: " + allDevices[band][i].uptime +
-			"<br>Load Avg: 1min " + allDevices[band][i].loadavg[0] + ", 5min " + allDevices[band][i].loadavg[1] + ", 15min " + allDevices[band][i].loadavg[2] +
-			"<br>" + allDevices[band][i].hopsAway + " hops away from map polling system</div></div>" +
-			"<div class='popupTab' id='popupTab-Services'><div class='popupTabContent'><br>" + createServiceList(allDevices[band][i].services) + "</div></div>" +
-			"<div class='popupTab' id='popupTab-Links'><div class='popupTabContent'><br>" + createLinkList(allDevices[band][i].link_info) + "</div></div>" +
-			"<ul class='popupTabs-link'><li class='popupTab-link'><a href='#popupTab-Main'><span>Main</span></a></li><li class='popupTab-link'>" +
-			"<a href='#popupTab-Services'><span>Services</span></a></li><li class='popupTab-link''><a href='#popupTab-Links'><span>Links</span></a></li></ul>" +
-			"</div>";
+		var popup = createNodePopup(allDevices[band][i]);
 		if(mapInfo['localnode'] == allDevices[band][i].node) {
 			oms.addMarker(L.marker([allDevices[band][i].lat, allDevices[band][i].lon], {
 				icon: pulse2,
@@ -198,21 +238,7 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['3ghz'].length; i++) {
 		var band = "3ghz";
-		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
-		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
-			allDevices[band][i].node + ".local.mesh' target='node'>" + allDevices[band][i].node + "</a></NodeTitle>" +
-			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
-			"<br>Channel: " + allDevices[band][i].channel + " (" + allDevices[band][i].freq + "MHz) , Bandwidth: " + allDevices[band][i].chanbw +
-			"<br>" + allDevices[band][i].model + "<br>Firmware: " + allDevices[band][i].firmware_version +
-			"<br>Antenna: " + allDevices[band][i].antDesc + " Gain: " + allDevices[band][i].antGain + " Beam: " + allDevices[band][i].antBeam + "&deg;" +
-			"<br>Last Polled: " + localTime.toLocaleString() + "<br>Uptime: " + allDevices[band][i].uptime +
-			"<br>Load Avg: 1min " + allDevices[band][i].loadavg[0] + ", 5min " + allDevices[band][i].loadavg[1] + ", 15min " + allDevices[band][i].loadavg[2] +
-			"<br>" + allDevices[band][i].hopsAway + " hops away from map polling system</div></div>" +
-			"<div class='popupTab' id='popupTab-Services'><div class='popupTabContent'><br>" + createServiceList(allDevices[band][i].services) + "</div></div>" +
-			"<div class='popupTab' id='popupTab-Links'><div class='popupTabContent'><br>" + createLinkList(allDevices[band][i].link_info) + "</div></div>" +
-			"<ul class='popupTabs-link'><li class='popupTab-link'><a href='#popupTab-Main'><span>Main</span></a></li><li class='popupTab-link'>" +
-			"<a href='#popupTab-Services'><span>Services</span></a></li><li class='popupTab-link''><a href='#popupTab-Links'><span>Links</span></a></li></ul>" +
-			"</div>";
+		var popup = createNodePopup(allDevices[band][i]);
 		if(mapInfo['localnode'] == allDevices[band][i].node) {
 			oms.addMarker(L.marker([allDevices[band][i].lat, allDevices[band][i].lon], {
 				icon: pulse3,
@@ -232,21 +258,7 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['5ghz'].length; i++) {
 		var band = "5ghz";
-		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
-		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
-			allDevices[band][i].node + ".local.mesh' target='_blank' rel='noopener'>" + allDevices[band][i].node + "</a></NodeTitle>" +
-			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br><strong>SSID</strong>: " + allDevices[band][i].ssid +
-			"<br><strong>Channel</strong>: " + allDevices[band][i].channel + " (" + allDevices[band][i].freq + "MHz) , Bandwidth: " + allDevices[band][i].chanbw +
-			"<br>" + allDevices[band][i].model + "<br>Firmware: " + allDevices[band][i].firmware_version +
-			"<br>Antenna: " + allDevices[band][i].antDesc + " Gain: " + allDevices[band][i].antGain + " Beam: " + allDevices[band][i].antBeam + "&deg;" +
-			"<br>Last Polled: " + localTime.toLocaleString() + "<br>Uptime: " + allDevices[band][i].uptime +
-			"<br>Load Avg: 1min " + allDevices[band][i].loadavg[0] + ", 5min " + allDevices[band][i].loadavg[1] + ", 15min " + allDevices[band][i].loadavg[2] +
-			"<br>" + allDevices[band][i].hopsAway + " hops away from map polling system</div></div>" +
-			"<div class='popupTab' id='popupTab-Services'><div class='popupTabContent'><br>" + createServiceList(allDevices[band][i].services) + "</div></div>" +
-			"<div class='popupTab' id='popupTab-Links'><div class='popupTabContent'><br>" + createLinkList(allDevices[band][i].link_info) + "</div></div>" +
-			"<ul class='popupTabs-link'><li class='popupTab-link'><a href='#popupTab-Main'><span>Main</span></a></li><li class='popupTab-link'>" +
-			"<a href='#popupTab-Services'><span>Services</span></a></li><li class='popupTab-link''><a href='#popupTab-Links'><span>Links</span></a></li></ul>" +
-			"</div>";
+		var popup = createNodePopup(allDevices[band][i]);
 		if(mapInfo['localnode'] == allDevices[band][i].node) {
 			oms.addMarker(L.marker([allDevices[band][i].lat, allDevices[band][i].lon], {
 				icon: pulse5,
@@ -266,21 +278,7 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['noRF'].length; i++) {
 		var band = "noRF";
-		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
-		var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
-			allDevices[band][i].node + ".local.mesh' target='node'>" + allDevices[band][i].node + "</a></NodeTitle>" +
-			"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
-			"<br>Channel: " + allDevices[band][i].channel + ", Bandwidth: " + allDevices[band][i].chanbw +
-			"<br>" + allDevices[band][i].model + "<br>Firmware: " + allDevices[band][i].firmware_version +
-			"<br>Antenna: " + allDevices[band][i].antDesc + " Gain: " + allDevices[band][i].antGain + " Beam: " + allDevices[band][i].antBeam + "&deg;" +
-			"<br>Last Polled: " + localTime.toLocaleString() + "<br>Uptime: " + allDevices[band][i].uptime +
-			"<br>Load Avg: 1min " + allDevices[band][i].loadavg[0] + ", 5min " + allDevices[band][i].loadavg[1] + ", 15min " + allDevices[band][i].loadavg[2] +
-			"<br>" + allDevices[band][i].hopsAway + " hops away from map polling system</div></div>" +
-			"<div class='popupTab' id='popupTab-Services'><div class='popupTabContent'><br>" + createServiceList(allDevices[band][i].services) + "</div></div>" +
-			"<div class='popupTab' id='popupTab-Links'><div class='popupTabContent'><br>" + createLinkList(allDevices[band][i].link_info) + "</div></div>" +
-			"<ul class='popupTabs-link'><li class='popupTab-link'><a href='#popupTab-Main'><span>Main</span></a></li><li class='popupTab-link'>" +
-			"<a href='#popupTab-Services'><span>Services</span></a></li><li class='popupTab-link''><a href='#popupTab-Links'><span>Links</span></a></li></ul>" +
-			"</div>";
+		var popup = createNodePopup(allDevices[band][i], {showFreq: false});
 		if(mapInfo['localnode'] == allDevices[band][i].node) {
 			oms.addMarker(L.marker([allDevices[band][i].lat, allDevices[band][i].lon], {
 				icon: pulseNon,
@@ -296,23 +294,9 @@ function createDeviceMarkers(allDevices) {
 	}
 	for(var i = 0; i < allDevices['supernode'].length; i++) {
 		var band = "supernode";
-		var localTime = parseUTCTimestamp(allDevices[band][i].last_seen);
-			var popup = "<div class='popupTabs'><div class='popupTab' id='popupMain'><div class='popupTabContent'><NodeTitle><a href='http://" +
-				allDevices[band][i].node + ".local.mesh' target='node'>" + allDevices[band][i].node + "</a></NodeTitle>" +
-				"<br>" + allDevices[band][i].lat + ", " + allDevices[band][i].lon + "<br>" + allDevices[band][i].ssid +
-				"<br>Channel: " + allDevices[band][i].channel + ", Bandwidth: " + allDevices[band][i].chanbw +
-				"<br>" + allDevices[band][i].model + "<br>Firmware: " + allDevices[band][i].firmware_version +
-				"<br>Antenna: " + allDevices[band][i].antDesc + " Gain: " + allDevices[band][i].antGain + " Beam: " + allDevices[band][i].antBeam + "&deg;" +
-				"<br>Last Polled: " + localTime.toLocaleString() + "<br>Uptime: " + allDevices[band][i].uptime +
-				"<br>Load Avg: 1min " + allDevices[band][i].loadavg[0] + ", 5min " + allDevices[band][i].loadavg[1] + ", 15min " + allDevices[band][i].loadavg[2] +
-				"<br>" + allDevices[band][i].hopsAway + " hops away from map polling system</div></div>" +
-				"<div class='popupTab' id='popupTab-Services'><div class='popupTabContent'><br>" + createServiceList(allDevices[band][i].services) + "</div></div>" +
-				"<div class='popupTab' id='popupTab-Links'><div class='popupTabContent'><br>" + createLinkList(allDevices[band][i].link_info) + "</div></div>" +
-				"<ul class='popupTabs-link'><li class='popupTab-link'><a href='#popupTab-Main'><span>Main</span></a></li><li class='popupTab-link'>" +
-				"<a href='#popupTab-Services'><span>Services</span></a></li><li class='popupTab-link''><a href='#popupTab-Links'><span>Links</span></a></li></ul>" +
-				"</div>";
-			if(mapInfo['localnode'] == allDevices[band][i].node) {
-				oms.addMarker(L.marker([allDevices[band][i].lat, allDevices[band][i].lon], {
+		var popup = createNodePopup(allDevices[band][i], {showFreq: false, hopSource: 'map polling system'});
+		if(mapInfo['localnode'] == allDevices[band][i].node) {
+			oms.addMarker(L.marker([allDevices[band][i].lat, allDevices[band][i].lon], {
 					icon: pulseSuper,
 					title: allDevices[band][i].node
 				}).bindPopup(popup, {maxwidth: 500}).addTo(superNodeStations));

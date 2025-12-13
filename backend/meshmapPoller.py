@@ -1157,6 +1157,7 @@ class MeshPollingDaemon:
             ip = node.get('ip')
             if not ip:
                 continue
+            # Default to 1 hop (direct neighbor); will be overridden by optional MTR hopCount feature.
             hops = 1
             if hops > max_hops:
                 max_hops = hops
@@ -1173,9 +1174,121 @@ class MeshPollingDaemon:
 
         self.stats['highestHops'] = max_hops
         return nodes
+
+    def _measure_hops_mtr(self, target_ip: str) -> Optional[int]:
+        """Measure hop count to target_ip using mtr (report mode, single cycle).
+        Returns hop count as int, or None on failure. Requires mtr installed and ICMP permitted.
+        """
+        try:
+            import subprocess, shlex, re
+            cmd = f"mtr -r -c 1 -n {shlex.quote(target_ip)}"
+            proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, text=True)
+            if proc.returncode != 0:
+                self.logger.debug(f"MTR failed for {target_ip}: returncode={proc.returncode}, stderr={proc.stderr[:200]}")
+                return None
+            lines = [l for l in proc.stdout.splitlines() if l.strip()]
+            # Robustly parse hop lines, which typically start like "  1.|-- ip ..."
+            hop_entries: List[Tuple[int, str]] = []
+            hop_re = re.compile(r"^\s*(\d+)\.")
+            for l in lines:
+                m = hop_re.match(l)
+                if m:
+                    try:
+                        hop_idx = int(m.group(1))
+                        hop_entries.append((hop_idx, l))
+                    except Exception:
+                        continue
+            if not hop_entries:
+                self.logger.debug(f"MTR for {target_ip}: no hop rows found in output")
+                return None
+            # The largest hop index represents the destination hop count
+            hop_entries.sort(key=lambda x: x[0])
+            hop_count = hop_entries[-1][0]
+            self.logger.debug(f"MTR for {target_ip}: measured {hop_count} hops")
+            return hop_count
+        except Exception as e:
+            self.logger.debug(f"MTR for {target_ip}: exception {e}")
+            return None
+
+    async def _maybe_update_hops(self, node_devices: Dict[str, Dict]) -> None:
+        """Optionally update hopsAway using MTR in parallel and await completion before proceeding."""
+        enabled = False
+        try:
+            # ConfigManager.get() auto-converts "true"/"false" strings to boolean
+            enabled = self.config.get('user-settings', 'hopCount', fallback=False)
+            if not isinstance(enabled, bool):
+                enabled = False
+        except Exception as e:
+            self.logger.warning(f"Failed to read hopCount setting: {e}")
+            enabled = False
+        
+        self.logger.info(f"Hop count measurement via MTR: {'enabled' if enabled else 'disabled'}")
+        if not enabled:
+            # Set all nodes to 0 hops when MTR is disabled
+            for ip, info in node_devices.items():
+                info['hopsAway'] = 0
+            return
+
+        import asyncio
+
+        async def measure_and_set(ip: str, info: Dict[str, Any], sem: asyncio.Semaphore):
+            if self.shutdown_event.is_set():
+                return
+            async with sem:
+                if self.shutdown_event.is_set():
+                    return
+                # Run blocking mtr in a thread to avoid blocking event loop
+                hop = await asyncio.to_thread(self._measure_hops_mtr, ip)
+                if hop is not None:
+                    info['hopsAway'] = hop
+                else:
+                    # If MTR fails to determine hop count, set to 0
+                    info['hopsAway'] = 0
+
+        # Use same concurrency setting as polling
+        node_count = len(node_devices)
+        self.logger.info(f"Measuring hops to {node_count} nodes using MTR ({self.parallel_threads} concurrent)...")
+        sem = asyncio.Semaphore(self.parallel_threads)
+        
+        # Process nodes in batches of 20 for incremental logging
+        all_items = list(node_devices.items())
+        completed = 0
+        batch_size = 20
+        batch_tasks: List[asyncio.Task] = []
+        
+        try:
+            for batch_start in range(0, len(all_items), batch_size):
+                # Check for shutdown before starting new batch
+                if self.shutdown_event.is_set():
+                    self.logger.info(f"MTR measurement interrupted at {completed}/{node_count} nodes")
+                    break
+                
+                batch_end = min(batch_start + batch_size, len(all_items))
+                batch_items = all_items[batch_start:batch_end]
+                
+                # Create tasks for this batch
+                batch_tasks = [asyncio.create_task(measure_and_set(ip, info, sem)) for ip, info in batch_items]
+                
+                # Await this batch
+                if batch_tasks:
+                    await asyncio.gather(*batch_tasks, return_exceptions=True)
+                
+                completed = batch_end
+                percent = int((completed / node_count) * 100)
+                self.logger.info(f"MTR progress: {percent}% ({completed}/{node_count})")
+        finally:
+            # Cancel any remaining tasks on shutdown
+            for t in batch_tasks:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(*batch_tasks, return_exceptions=True)
+        
+        self.logger.info(f"Hop measurement complete")
     
     async def _update_topology_info(self, node_devices: Dict):
         """Update database with initial topology information"""
+        # Optionally enhance hopsAway using MTR before persisting
+        await self._maybe_update_hops(node_devices)
         for ip, info in node_devices.items():
             # Only insert pollable nodes (those with valid hopsAway)
             # Synthesized nodes (hopsAway=None) will be created from link data enrichment later
@@ -1524,7 +1637,11 @@ class MeshPollingDaemon:
                     'last_seen': last_seen,
                     'protocol': protocol,
                     'response_time_ms': int(round(node.get('response_time_ms', 0.0))),
+                    'hopsAway': node.get('hopsAway', 1),
                 }
+                
+                # Add node_data to both node_report and frequency-based categorization for map
+                # This ensures protocol is available in both outputs
                 
                 node_report.append(node_data)
 
