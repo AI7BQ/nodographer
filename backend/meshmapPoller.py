@@ -1240,7 +1240,8 @@ class MeshPollingDaemon:
                 hop = await asyncio.to_thread(self._measure_hops_mtr, ip)
                 self.logger.debug(f"MTR result for {ip}: {hop}")
                 if hop is not None:
-                    info['hopsAway'] = hop
+                    # Subtract 1 from MTR hop count before storing
+                    info['hopsAway'] = max(0, hop - 1)
                 # If MTR fails, leave hopsAway at its default value (1 from topology)
 
         # Use same concurrency setting as polling
