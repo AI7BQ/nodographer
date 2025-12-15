@@ -126,6 +126,7 @@ function initializeMap() {
 
   // Initialize map tile layers
 	const tileEntries = Object.entries(mapInfo['mapTileServers'] || {});
+	const tileOrder = tileEntries.map(([k]) => k);
 	const preferredDefault = mapInfo['defaultTileServer'];
 	let defaultKey = preferredDefault && (preferredDefault in mapInfo['mapTileServers']) ? preferredDefault : null;
 
@@ -151,10 +152,36 @@ function initializeMap() {
 		defaultMap = baseLayers[defaultKey];
 		defaultMapName = defaultKey;
 	} else {
-		// Fallback: pick the first available layer
-		const fallbackKey = tileEntries.length ? tileEntries[0][0] : null;
+		// Fallback: pick the first available layer by priority order
+		const fallbackKey = tileOrder.length ? tileOrder[0] : null;
 		defaultMap = fallbackKey ? baseLayers[fallbackKey] : null;
 		defaultMapName = fallbackKey || "";
+	}
+
+	// Monitor tile errors on the current base layer and fallback by priority
+	if (defaultMap) {
+		defaultMap.on('tileerror', switchToNextTileLayer);
+	}
+
+	// Attach tile error handler to auto-fallback by priority order
+	function switchToNextTileLayer() {
+		if (!defaultMapName) return;
+		const idx = tileOrder.indexOf(defaultMapName);
+		for (let step = 1; step < tileOrder.length; step++) {
+			const nextIdx = (idx + step) % tileOrder.length;
+			const nextName = tileOrder[nextIdx];
+			const nextLayer = baseLayers[nextName];
+			if (nextLayer) {
+				if (defaultMap) {
+					map.removeLayer(defaultMap);
+				}
+				defaultMap = nextLayer;
+				defaultMapName = nextName;
+				nextLayer.addTo(map);
+				nextLayer.on('tileerror', switchToNextTileLayer);
+				break;
+			}
+		}
 	}
 
 	/*

@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 import json
 import pickle
-import configparser
+import tomli
 import math
 import re
 from dataclasses import dataclass, field, asdict
@@ -225,25 +225,21 @@ class NodeInfo:
 class ConfigManager:
     """Manages configuration loading and validation"""
     
-    def __init__(self, config_path: str = "../settings.ini"):
+    def __init__(self, config_path: str = "../settings.toml"):
         self.config_path = Path(config_path)
         self.config = self._load_config()
         
-    def _load_config(self) -> configparser.ConfigParser:
-        """Load configuration from settings file"""
-        config = configparser.ConfigParser()
-        
-        # Load user settings
+    def _load_config(self) -> dict:
+        """Load configuration from TOML settings file"""
         if not self.config_path.exists():
             raise FileNotFoundError(
                 f"\nConfiguration file not found: {self.config_path}\n"
             )
-        config.read(self.config_path)
-        
-        return config
+        with open(self.config_path, 'rb') as f:
+            return tomli.load(f)
     
     def _strip_quotes(self, value: str) -> str:
-        """Remove surrounding quotes from config values"""
+        """Remove surrounding quotes from config values (legacy INI compatibility)"""
         if isinstance(value, str):
             value = value.strip()
             if (value.startswith('"') and value.endswith('"')) or \
@@ -254,31 +250,32 @@ class ConfigManager:
     def get(self, section: str, key: str, fallback: Any = None) -> Any:
         """Get configuration value with fallback"""
         try:
-            value = self.config.get(section, key)
-            value = self._strip_quotes(value)
-            # Convert boolean strings
-            if isinstance(value, str) and value.lower() in ('true', 'false'):
-                return value.lower() == 'true'
+            if section not in self.config:
+                return fallback
+            value = self.config[section].get(key, fallback)
+            # TOML handles booleans natively, no conversion needed
             return value
-        except (configparser.NoSectionError, configparser.NoOptionError):
+        except (KeyError, AttributeError):
             return fallback
     
     def getint(self, section: str, key: str, fallback: int = 0) -> int:
         """Get integer configuration value"""
         try:
-            value = self.config.get(section, key)
-            value = self._strip_quotes(value)
-            return int(value)
-        except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
+            if section not in self.config:
+                return fallback
+            value = self.config[section].get(key, fallback)
+            return int(value) if value is not None else fallback
+        except (KeyError, AttributeError, ValueError):
             return fallback
     
     def getfloat(self, section: str, key: str, fallback: float = 0.0) -> float:
         """Get float configuration value"""
         try:
-            value = self.config.get(section, key)
-            value = self._strip_quotes(value)
-            return float(value)
-        except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
+            if section not in self.config:
+                return fallback
+            value = self.config[section].get(key, fallback)
+            return float(value) if value is not None else fallback
+        except (KeyError, AttributeError, ValueError):
             return fallback
 
 
@@ -294,10 +291,10 @@ class MySQLAdapter:
         try:
             import aiomysql
             self.pool = await aiomysql.create_pool(
-                host=self.config.get('user-settings', 'sql_server', 'localhost'),
-                user=self.config.get('user-settings', 'sql_user', 'mesh-map'),
-                password=self.config.get('user-settings', 'sql_passwd', ''),
-                db=self.config.get('user-settings', 'sql_db', 'node_map'),
+                host=self.config.get('database', 'server', 'localhost'),
+                user=self.config.get('database', 'user', 'mesh-map'),
+                password=self.config.get('database', 'password', ''),
+                db=self.config.get('database', 'database', 'node_map'),
                 autocommit=True,
                 minsize=5,
                 maxsize=20
@@ -316,9 +313,9 @@ class MySQLAdapter:
 
     async def _ensure_tables(self):
         """Create database tables if they don't exist"""
-        sql_db_tbl_node = self.config.get('user-settings', 'sql_db_tbl_node', 'node_info')
-        sql_db_tbl_map = self.config.get('user-settings', 'sql_db_tbl_map', 'map_info')
-        sql_db_tbl_aredn = self.config.get('user-settings', 'sql_db_tbl_aredn', 'aredn_info')
+        sql_db_tbl_node = self.config.get('database', 'table_node', 'node_info')
+        sql_db_tbl_map = self.config.get('database', 'table_map', 'map_info')
+        sql_db_tbl_aredn = self.config.get('database', 'table_aredn', 'aredn_info')
         
         async with self.pool.acquire() as conn:
             # Suppress warnings for "table already exists"
@@ -815,9 +812,9 @@ class MeshPollingDaemon:
         self.db = MySQLAdapter(config)
         
         # Polling configuration
-        self.nodelistNode = self.config.get('user-settings', 'nodelistNode', 'localnode.local.mesh')
-        self.parallel_threads = self.config.getint('user-settings', 'numParallelThreads', 60)
-        self.poller_cycle_minutes = self.config.getint('user-settings', 'pollerCycleTime', 30)
+        self.nodelistNode = self.config.get('polling', 'nodelistNode', 'localnode.local.mesh')
+        self.parallel_threads = self.config.getint('polling', 'numParallelThreads', 60)
+        self.poller_cycle_minutes = self.config.getint('polling', 'pollerCycleTime', 30)
         self.poller_cycle_seconds = max(self.poller_cycle_minutes * 60, 1)
         self.localnode_ip: Optional[str] = None
         self.initial_link_map: Dict[str, Dict] = {}
@@ -842,12 +839,12 @@ class MeshPollingDaemon:
         }
 
         # Firmware classification thresholds (defaults mirror filter.py)
-        self.protocol_threshold_seconds = self.config.getint('user-settings', 'protocol_threshold_seconds', 60 * 60 * 24 * 7)
-        self.protocol_version_cutoff = version_to_int(str(self.config.get('user-settings', 'protocol_version_cutoff', '3.25.5.0')))
+        self.protocol_threshold_seconds = self.config.getint('polling', 'protocol_threshold_seconds', 60 * 60 * 24 * 7)
+        self.protocol_version_cutoff = version_to_int(str(self.config.get('polling', 'protocol_version_cutoff', '3.25.5.0')))
         if self.protocol_version_cutoff is None:
             self.protocol_version_cutoff = version_to_int('3.25.5.0')
 
-        self.protocol_nightly_cutoff = nightly_to_int(str(self.config.get('user-settings', 'protocol_nightly_cutoff', '20250507-aaaaaaaa')))
+        self.protocol_nightly_cutoff = nightly_to_int(str(self.config.get('polling', 'protocol_nightly_cutoff', '20250507-aaaaaaaa')))
         if self.protocol_nightly_cutoff is None:
             self.protocol_nightly_cutoff = nightly_to_int('20250507-aaaaaaaa')
         
@@ -1218,7 +1215,7 @@ class MeshPollingDaemon:
         enabled = False
         try:
             # ConfigManager.get() auto-converts "true"/"false" strings to boolean
-            enabled = self.config.get('user-settings', 'enableHopCount', fallback=False)
+            enabled = self.config.get('polling', 'enableHopCount', fallback=False)
             self.logger.info(f"enableHopCount value: {enabled!r} (type: {type(enabled).__name__})")
         except Exception as e:
             self.logger.warning(f"Failed to read enableHopCount setting: {e}")
@@ -1518,7 +1515,7 @@ class MeshPollingDaemon:
     async def _generate_data_files(self):
         """Generate JavaScript/JSON data files for web interface"""
         try:
-            data_dir = Path(self.config.get('user-settings', 'webpageDataDir', 'data'))
+            data_dir = Path(self.config.get('json', 'jsonDir', 'data'))
             data_dir.mkdir(parents=True, exist_ok=True)
             
             # Get all nodes from database
@@ -1568,7 +1565,7 @@ class MeshPollingDaemon:
                 if (not link_info_data):
                     if self.localnode_ip and node.get('wlan_ip') == self.localnode_ip:
                         link_info_data = self.initial_link_map.get(self.localnode_ip, {})
-                    elif self.initial_link_map and node.get('node') == self.config.get('user-settings', 'localnode', 'localnode.local.mesh'):
+                    elif self.initial_link_map and node.get('node') == self.config.get('polling', 'localnode', 'localnode.local.mesh'):
                         # Fallback match by node name if IPs differ
                         # initial_link_map is keyed by localnode_ip; grab first (only) entry
                         first_entry = next(iter(self.initial_link_map.values()), {})
@@ -1691,114 +1688,52 @@ class MeshPollingDaemon:
             total_nodes_in_db = len([n for n in all_nodes if n.get('lat') or n.get('lon')])
             week_plus_old = len([n for n in all_nodes if not n.get('last_seen')])
             
-            # Parse map tile servers from user config only (not defaults)
-            # This respects commented-out lines in settings.ini
+            # Parse map tile servers from TOML config
             map_tile_servers = {}
             default_tile_server = None
             priority_list: List[str] = []
-            user_config = configparser.ConfigParser()
-            # Preserve case so keys like inet.Topographic remain intact
-            user_config.optionxform = str
-            user_config.read(Path('../settings.ini'))
             
-            if 'user-settings' in user_config:
-                # Parse tileServerPriority list (preferred ordering and default)
-                priority_raw = user_config.get('user-settings', 'tileServerPriority', fallback='')
-                if priority_raw:
-                    try:
-                        priority_list = json.loads(priority_raw)
-                    except Exception:
-                        try:
-                            import ast
-                            parsed = ast.literal_eval(priority_raw)
-                            if isinstance(parsed, list):
-                                priority_list = [str(x) for x in parsed]
-                        except Exception:
-                            priority_list = []
-                priority_list = [p.strip().strip('"').strip("'") for p in priority_list if p]
-
-                # Read DefaultTileServer (legacy)
-                default_tile_server = user_config.get('user-settings', 'DefaultTileServer', fallback='')
-                if default_tile_server.startswith('"') and default_tile_server.endswith('"'):
-                    default_tile_server = default_tile_server[1:-1]
-                if not default_tile_server:
-                    default_tile_server = None
-
-                # Collect all internet tile servers
-                for key in user_config['user-settings']:
-                    if key.lower().startswith('inettileserver['):
-                        inet_name = key.split("'")[1] if "'" in key else key.split('[')[1].split(']')[0]
-                        inet_value = user_config.get('user-settings', key)
-                        if inet_value.startswith('"') and inet_value.endswith('"'):
-                            inet_value = inet_value[1:-1]
-                        map_tile_servers[inet_name] = inet_value
-
-                # Collect all AREDN tile servers
-                for key in user_config['user-settings']:
-                    if key.lower().startswith('aredntileserver['):
-                        aredn_name = key.split("'")[1] if "'" in key else key.split('[')[1].split(']')[0]
-                        aredn_value = user_config.get('user-settings', key)
-                        if aredn_value.startswith('"') and aredn_value.endswith('"'):
-                            aredn_value = aredn_value[1:-1]
-                        map_tile_servers[aredn_name] = aredn_value
-
-                # Legacy mapTileServers support
-                for key in user_config['user-settings']:
-                    if key.lower().startswith('maptileservers['):
-                        server_name = key.split("'")[1] if "'" in key else key.split('[')[1].split(']')[0]
-                        value = user_config.get('user-settings', key)
-                        if value.startswith('"') and value.endswith('"'):
-                            value = value[1:-1]
-                        map_tile_servers[server_name] = value
-
-                # Determine default from priority list first
-                if priority_list:
-                    for candidate in priority_list:
-                        if candidate in map_tile_servers:
-                            default_tile_server = candidate
-                            break
-
-                # Fallbacks if still not set: legacy keys, then legacy suffix, then first entry
-                if not default_tile_server:
-                    inet_default = user_config.get('user-settings', 'inetDefaultTileServer', fallback='')
-                    if inet_default.startswith('"') and inet_default.endswith('"'):
-                        inet_default = inet_default[1:-1]
-                    if inet_default and inet_default in map_tile_servers:
-                        default_tile_server = inet_default
-
-                if not default_tile_server:
-                    aredn_default = user_config.get('user-settings', 'arednDefaultTileServer', fallback='')
-                    if aredn_default.startswith('"') and aredn_default.endswith('"'):
-                        aredn_default = aredn_default[1:-1]
-                    if aredn_default and aredn_default in map_tile_servers:
-                        default_tile_server = aredn_default
-
-                if not default_tile_server:
-                    for name in map_tile_servers:
-                        if name.endswith('-default') or name.endswith('-Default'):
-                            default_tile_server = name
-                            break
-
-                if not default_tile_server and map_tile_servers:
-                    default_tile_server = next(iter(map_tile_servers))
-
-                # Reorder map_tile_servers honoring priority_list first
-                if priority_list:
-                    ordered = {}
-                    for name in priority_list:
-                        if name in map_tile_servers:
-                            ordered[name] = map_tile_servers[name]
-                    for name, url in map_tile_servers.items():
-                        if name not in ordered:
-                            ordered[name] = url
-                    map_tile_servers = ordered
+            # Read tile servers and priority from single section
+            tileservers_config = self.config.get('tileservers', {})
+            if isinstance(tileservers_config, dict):
+                # Extract priority list
+                priority_list = tileservers_config.get('priority', [])
+                if not isinstance(priority_list, list):
+                    priority_list = []
+                
+                # Get all tile server URLs (exclude priority key)
+                for key, value in tileservers_config.items():
+                    if key != 'priority' and isinstance(value, str):
+                        map_tile_servers[key] = value
+            
+            # Determine default from priority list first
+            if priority_list:
+                for candidate in priority_list:
+                    if candidate in map_tile_servers:
+                        default_tile_server = candidate
+                        break
+            
+            # Fallback: first entry of ordered servers
+            if not default_tile_server and map_tile_servers:
+                default_tile_server = next(iter(map_tile_servers))
+            
+            # Reorder map_tile_servers honoring priority_list first
+            if priority_list:
+                ordered = {}
+                for name in priority_list:
+                    if name in map_tile_servers:
+                        ordered[name] = map_tile_servers[name]
+                for name, url in map_tile_servers.items():
+                    if name not in ordered:
+                        ordered[name] = url
+                map_tile_servers = ordered
             
             # Parse map center coordinates
-            map_center_lat = float(self.config.get('user-settings', "map_center_coordinates['lat']", '0'))
-            map_center_lon = float(self.config.get('user-settings', "map_center_coordinates['lon']", '0'))
+            map_center_lat = float(self.config.get('map', 'center_lat', 0))
+            map_center_lon = float(self.config.get('map', 'center_lon', 0))
             
             # Handle distanceUnits setting (default to miles if missing or invalid)
-            distance_units = self.config.get('user-settings', 'distanceUnits', 'miles')
+            distance_units = self.config.get('map', 'distanceUnits', 'miles')
             kilometers = distance_units == 'kilometers'
             
             map_info = {
@@ -1806,17 +1741,17 @@ class MeshPollingDaemon:
                 'lastUpdate': datetime.utcnow().replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ'),
                 'mapTileServers': map_tile_servers,
                 'defaultTileServer': default_tile_server,
-                'title': self.config.get('user-settings', 'map_browserTitle', 'MeshMap'),
-                'attribution': self.config.get('user-settings', 'attribution', ''),
-                'mapContact': self.config.get('user-settings', 'mapContact', ''),
+                'title': self.config.get('map', 'browserTitle', 'MeshMap'),
+                'attribution': self.config.get('attribution', 'credit', ''),
+                'mapContact': self.config.get('map', 'contact', ''),
                 'kilometers': kilometers,
                 'webpageDataDir': '',
                 'mapCenterCoords': [map_center_lat, map_center_lon],
-                'mapInitialZoom': int(self.config.get('user-settings', 'map_initial_zoom_level', '10')),
+                'mapInitialZoom': int(self.config.get('map', 'initial_zoom_level', 10)),
                 'totalNodesInDB': total_nodes_in_db,
                 'weekPlusOld': week_plus_old,
-                'reportBrowserTitle': self.config.get('user-settings', 'report_browserTitle', 'Node Report'),
-                'reportPageTitle': self.config.get('user-settings', 'report_pageTitle', 'Node Report')
+                'reportBrowserTitle': self.config.get('attribution', 'browserTitle', 'Node Report'),
+                'reportPageTitle': self.config.get('attribution', 'pageTitle', 'Node Report')
             }
             
             # Custom JSON encoder to handle Decimal types from MariaDB
@@ -1970,13 +1905,13 @@ async def _flush_database(config: ConfigManager):
     import aiomysql
     
     # Get DB config
-    sql_server = config.get('user-settings', 'sql_server', 'localhost')
-    sql_user = config.get('user-settings', 'sql_user', 'mesh-map')
-    sql_passwd = config.get('user-settings', 'sql_passwd', 'password')
-    sql_db = config.get('user-settings', 'sql_db', 'node_map')
-    sql_db_tbl_node = config.get('user-settings', 'sql_db_tbl_node', 'node_info')
-    sql_db_tbl_map = config.get('user-settings', 'sql_db_tbl_map', 'map_info')
-    sql_db_tbl_aredn = config.get('user-settings', 'sql_db_tbl_aredn', 'aredn_info')
+    sql_server = config.get('database', 'server', 'localhost')
+    sql_user = config.get('database', 'user', 'mesh-map')
+    sql_passwd = config.get('database', 'password', 'password')
+    sql_db = config.get('database', 'database', 'node_map')
+    sql_db_tbl_node = config.get('database', 'table_node', 'node_info')
+    sql_db_tbl_map = config.get('database', 'table_map', 'map_info')
+    sql_db_tbl_aredn = config.get('database', 'table_aredn', 'aredn_info')
     
     print(f"Initializing MariaDB database '{sql_db}' with user '{sql_user}'...")
     

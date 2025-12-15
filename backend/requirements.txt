@@ -7,8 +7,8 @@ aiohttp>=3.9.0
 aiomysql>=0.2.0      # MySQL/MariaDB async support
 aiosqlite>=0.19.0    # SQLite async support
 
-# Configuration parsing (built-in, but explicit for clarity)
-# configparser - included in Python standard library
+# Configuration parsing
+tomli>=2.0.0         # TOML parser for settings.toml (Python <3.11)
 
 # JSON handling (built-in)
 # json - included in Python standard library
