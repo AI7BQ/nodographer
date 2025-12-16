@@ -516,6 +516,21 @@ baseLayersLabel.innerHTML = '<b>Tile Servers</b>';
 const layerControlContainer = layerControls._container.querySelector('.leaflet-control-layers-list');
 if (layerControlContainer) {
 	layerControlContainer.insertBefore(baseLayersLabel, layerControlContainer.firstChild);
+	
+	// Add separator line above "RF Links" group - wait for DOM to render
+	setTimeout(() => {
+		const allGroups = layerControlContainer.querySelectorAll('.leaflet-control-layers-group');
+		allGroups.forEach(group => {
+			const groupName = group.querySelector('.leaflet-control-layers-group-name');
+			if (groupName && groupName.textContent.trim() === 'RF Links') {
+				const separator = document.createElement('div');
+				separator.style.borderTop = '1px solid #ddd';
+				separator.style.margin = '8px 0';
+				separator.style.width = '100%';
+				group.parentElement.insertBefore(separator, group);
+			}
+		});
+	}, 100);
 }
 
 //map scale

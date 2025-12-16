@@ -12,29 +12,25 @@ table_map = "map_info"
 table_aredn = "aredn_info"
 
 [polling]
-# Node that will provide the node list for polling
 nodelistNode = "localnode.local.mesh"
-
-# Time zone for operations
 localTimeZone = "America/Los_Angeles"
-
-# Controls how many nodes are polled concurrently
 numParallelThreads = 500
-
-# How often (in minutes) the meshmapPoller will run through the entire node list
 pollerCycleTime = 15
 
-# Optional hop count measurement using MTR
-enableHopCount = false
+[hops]
+enableHopCount = true
+parallelThreads = 800
+probeWaitSec = 0.5
+maxTTL = 32
+timeoutSec = 20.0
 
 [map]
 center_lat = 43.970
 center_lon = -120.034
 initial_zoom_level = 7
 distanceUnits = "miles"
-
 browserTitle = "Nodographer Mesh Map"
-# pageLogo = "images/MESHMAP_LOGO.svg"
+pageLogo = "images/MESHMAP_LOGO.svg"
 contact = ""
 
 [attribution]
@@ -50,9 +46,10 @@ expireInterval = 30
 jsonDir = "/srv/meshmap/frontend/data"
 
 [tileservers]
-inet.Topographic = "//{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
-inet.Street = "//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-aredn.W7SLZ = "//10.106.208.157:8080/data/v3/#{z}/{x}/{y}.png"
 aredn.K1RKS = "//aredn-tileserver2.local.mesh/hot/{z}/{x}/{y}.png"
 aredn.K9RCP = "//wvmn-tileserver.local.mesh/osm/tiles/{z}/{x}/{y}.png"
-priority = ["aredn.W7SLZ", "aredn.K1RKS", "aredn.K9RCP", "inet.Topographic", "inet.Street"]
+aredn.W7SLZ = "//w7slz-tileserver.local.mesh:8080/styles/basic-preview/512/{z}/{x}/{y}.png"
+inet.Topographic = "//{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+inet.Street = "//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+priority = ["aredn.K1RKS", "aredn.K9RCP", "aredn.W7SLZ", "inet.Topographic", "inet.Street"]

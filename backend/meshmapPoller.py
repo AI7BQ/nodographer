@@ -278,6 +278,11 @@ class ConfigManager:
         except (KeyError, AttributeError, ValueError):
             return fallback
 
+    def get_section(self, section: str) -> Dict[str, Any]:
+        """Return an entire configuration section as a dict."""
+        value = self.config.get(section, {})
+        return value if isinstance(value, dict) else {}
+
 
 class MySQLAdapter:
     """MariaDB/MySQL database adapter using aiomysql"""
@@ -808,12 +813,16 @@ class MeshPollingDaemon:
         self.running = False
         self.logger = self._setup_logging()
         
+        # Log all TOML configuration settings
+        self._log_configuration()
+        
         # Database (MariaDB/MySQL)
         self.db = MySQLAdapter(config)
         
         # Polling configuration
         self.nodelistNode = self.config.get('polling', 'nodelistNode', 'localnode.local.mesh')
         self.parallel_threads = self.config.getint('polling', 'numParallelThreads', 60)
+        self.hops_parallel_threads = self.config.getint('hops', 'parallelThreads', 800)
         self.poller_cycle_minutes = self.config.getint('polling', 'pollerCycleTime', 30)
         self.poller_cycle_seconds = max(self.poller_cycle_minutes * 60, 1)
         self.localnode_ip: Optional[str] = None
@@ -834,8 +843,10 @@ class MeshPollingDaemon:
             'babelNodes': 0,
             'olsrNodes': 0,
             'comboNodes': 0,
-            'minResponseTimeMs': 0.0,
-            'maxResponseTimeMs': 0.0,
+            'minJsonFetchTimeMs': 0.0,
+            'maxJsonFetchTimeMs': 0.0,
+            'minHopCountTimeMs': 0.0,
+            'maxHopCountTimeMs': 0.0,
         }
 
         # Firmware classification thresholds (defaults mirror filter.py)
@@ -897,6 +908,33 @@ class MeshPollingDaemon:
                 logger.addHandler(console_handler)
         
         return logger
+    
+    def _log_configuration(self):
+        """Log all TOML configuration settings at startup"""
+        self.logger.info("=" * 70)
+        self.logger.info("CONFIGURATION SETTINGS")
+        self.logger.info("=" * 70)
+        
+        config_dict = self.config.config
+        for section_name in sorted(config_dict.keys()):
+            section = config_dict[section_name]
+            self.logger.info(f"[{section_name}]")
+            
+            if isinstance(section, dict):
+                # Sort keys for consistent output
+                for key in sorted(section.keys()):
+                    value = section[key]
+                    # Format nested dicts (like tileservers)
+                    if isinstance(value, dict):
+                        self.logger.info(f"  {key} = <dict with {len(value)} items>")
+                    elif isinstance(value, list):
+                        self.logger.info(f"  {key} = {value}")
+                    else:
+                        self.logger.info(f"  {key} = {value}")
+            else:
+                self.logger.info(f"  <non-dict section>")
+        
+        self.logger.info("=" * 70)
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully"""
@@ -1157,7 +1195,7 @@ class MeshPollingDaemon:
             ip = node.get('ip')
             if not ip:
                 continue
-            # Default to 0 hops (unknown); will be overridden by optional MTR hopCount feature.
+            # Default to 0 hops (unknown); will be overridden by optional hop count feature.
             hops = 0
             if hops > max_hops:
                 max_hops = hops
@@ -1175,60 +1213,85 @@ class MeshPollingDaemon:
         self.stats['highestHops'] = max_hops
         return nodes
 
-    def _measure_hops_mtr(self, target_ip: str) -> Optional[int]:
-        """Measure hop count to target_ip using mtr (report mode, single cycle).
-        Returns hop count as int, or None on failure. Requires mtr installed and ICMP permitted.
+    async def _measure_hops(self, target_ip: str) -> Optional[Tuple[int, float]]:
+        """Measure hop count to target_ip using async subprocess.
+        Returns (hop_count, time_ms) tuple, or None on failure. Requires traceroute installed and ICMP permitted.
         """
+        import time
+        start_time = time.time()
         try:
-            import subprocess, shlex, re
-            cmd = f"mtr -r -c 1 -n {shlex.quote(target_ip)}"
-            proc = subprocess.run(cmd, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, text=True)
+            import re
+            # Use traceroute with max TTL and wait time per probe
+            max_ttl = int(self.config.get('hops', 'maxTTL', 32))
+            wait_time = float(self.config.get('hops', 'probeWaitSec', 0.5))
+            # Subprocess timeout should be generous enough for max_ttl * wait_time
+            timeout_sec = float(self.config.get('hops', 'timeoutSec', max_ttl * wait_time + 2.0))
+
+            traceroute_args = [
+                'traceroute', '-n', '-w', str(wait_time), '-m', str(max_ttl), str(target_ip)
+            ]
+            
+            proc = await asyncio.create_subprocess_exec(
+                *traceroute_args,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                self.logger.debug(f"Hop measurement for {target_ip}: timeout after {timeout_sec}s")
+                return None
+                
+            elapsed_ms = (time.time() - start_time) * 1000
+            
             if proc.returncode != 0:
-                self.logger.error(f"MTR failed for {target_ip}: returncode={proc.returncode}, stderr={proc.stderr[:200]}")
+                self.logger.error(f"Hop measurement failed for {target_ip}: returncode={proc.returncode}, stderr={stderr.decode()[:200]}")
                 return None
-            lines = [l for l in proc.stdout.splitlines() if l.strip()]
-            # Robustly parse hop lines, which typically start like "  1.|-- ip ..."
-            hop_entries: List[Tuple[int, str]] = []
-            hop_re = re.compile(r"^\s*(\d+)\.")
-            for l in lines:
-                m = hop_re.match(l)
-                if m:
-                    try:
-                        hop_idx = int(m.group(1))
-                        hop_entries.append((hop_idx, l))
-                    except Exception:
-                        continue
-            if not hop_entries:
-                self.logger.debug(f"MTR for {target_ip}: no hop rows found in output")
+            
+            # Get the last line with output
+            lines = [l.strip() for l in stdout.decode().splitlines() if l.strip()]
+            if not lines:
+                self.logger.debug(f"Hop measurement for {target_ip}: no output from traceroute")
                 return None
-            # The largest hop index represents the destination hop count
-            hop_entries.sort(key=lambda x: x[0])
-            hop_count = hop_entries[-1][0]
-            self.logger.debug(f"MTR for {target_ip}: measured {hop_count} hops")
-            return hop_count
+            
+            # Parse the last line for hop number (first field)
+            last_line = lines[-1]
+            match = re.match(r'^\s*(\d+)', last_line)
+            if match:
+                hop_count = int(match.group(1))
+                self.logger.debug(f"Hop measurement for {target_ip}: measured {hop_count} hops in {elapsed_ms:.2f}ms")
+                return (hop_count, elapsed_ms)
+            else:
+                self.logger.debug(f"Hop measurement for {target_ip}: could not parse hop count from: {last_line}")
+                return None
         except Exception as e:
-            self.logger.debug(f"MTR for {target_ip}: exception {e}")
+            self.logger.debug(f"Hop measurement for {target_ip}: exception {e}")
             return None
 
     async def _maybe_update_hops(self, node_devices: Dict[str, Dict]) -> None:
-        """Optionally update hopsAway using MTR in parallel and await completion before proceeding."""
+        """Optionally update hopsAway in parallel and await completion before proceeding."""
         enabled = False
         try:
-            # ConfigManager.get() auto-converts "true"/"false" strings to boolean
-            enabled = self.config.get('polling', 'enableHopCount', fallback=False)
+            # ConfigManager.get() reads TOML booleans natively
+            enabled = self.config.get('hops', 'enableHopCount', fallback=False)
             self.logger.info(f"enableHopCount value: {enabled!r} (type: {type(enabled).__name__})")
         except Exception as e:
             self.logger.warning(f"Failed to read enableHopCount setting: {e}")
             enabled = False
         
-        self.logger.info(f"Hop count measurement via MTR: {'enabled' if enabled else 'disabled'}")
+        self.logger.info(f"Hop count measurement: {'enabled' if enabled else 'disabled'}")
         if not enabled:
-            # Set all nodes to 0 hops when MTR is disabled
+            # Set all nodes to 0 hops when hop measurement is disabled
             for ip, info in node_devices.items():
                 info['hopsAway'] = 0
             return
 
         import asyncio
+        hop_times = []
 
         async def measure_and_set(ip: str, info: Dict[str, Any], sem: asyncio.Semaphore):
             if self.shutdown_event.is_set():
@@ -1236,57 +1299,69 @@ class MeshPollingDaemon:
             async with sem:
                 if self.shutdown_event.is_set():
                     return
-                # Run blocking mtr in a thread to avoid blocking event loop
-                hop = await asyncio.to_thread(self._measure_hops_mtr, ip)
-                self.logger.debug(f"MTR result for {ip}: {hop}")
-                if hop is not None:
-                    # Subtract 1 from MTR hop count before storing
-                    info['hopsAway'] = max(0, hop - 1)
-                # If MTR fails, leave hopsAway at its default value (1 from topology)
+                # Run async subprocess directly (no threading overhead)
+                result = await self._measure_hops(ip)
+                self.logger.debug(f"Hop measurement result for {ip}: {result}")
+                if result is not None:
+                    hop_count, elapsed_ms = result
+                    # Subtract 1 from measured hop count before storing
+                    info['hopsAway'] = max(0, hop_count - 1)
+                    hop_times.append(elapsed_ms)
+                # If measurement fails, leave hopsAway at its default value (1 from topology)
 
-        # Use same concurrency setting as polling
+        # Launch all hop measurement tasks at once with progress reporting at 10% completion intervals
         node_count = len(node_devices)
-        self.logger.info(f"Measuring hops to {node_count} nodes using MTR ({self.parallel_threads} concurrent)...")
-        sem = asyncio.Semaphore(self.parallel_threads)
+        self.logger.info(
+            f"Measuring hops to {node_count} nodes ({self.hops_parallel_threads} concurrent)..."
+        )
+        sem = asyncio.Semaphore(self.hops_parallel_threads)
         
-        # Process nodes in batches of 20 for incremental logging
+        # Shared progress tracking
+        completed_count = 0
+        completed_lock = asyncio.Lock()
+        last_reported_percent = 0
+        
+        async def measure_with_progress(ip: str, info: Dict[str, Any]):
+            nonlocal completed_count, last_reported_percent
+            try:
+                await measure_and_set(ip, info, sem)
+            finally:
+                # Update progress after each completion
+                async with completed_lock:
+                    completed_count += 1
+                    current_percent = int((completed_count / node_count) * 100)
+                    # Report at 10% intervals
+                    if current_percent >= last_reported_percent + 10 or completed_count == node_count:
+                        # Round down to nearest 10%
+                        report_percent = (current_percent // 10) * 10
+                        if report_percent > last_reported_percent or completed_count == node_count:
+                            self.logger.info(f"Hop measurement progress: {current_percent}% ({completed_count}/{node_count})")
+                            last_reported_percent = report_percent
+        
+        # Launch all tasks at once
         all_items = list(node_devices.items())
-        completed = 0
-        batch_size = 20
-        batch_tasks: List[asyncio.Task] = []
+        all_tasks = [asyncio.create_task(measure_with_progress(ip, info)) for ip, info in all_items]
         
         try:
-            for batch_start in range(0, len(all_items), batch_size):
-                # Check for shutdown before starting new batch
-                if self.shutdown_event.is_set():
-                    self.logger.info(f"MTR measurement interrupted at {completed}/{node_count} nodes")
-                    break
-                
-                batch_end = min(batch_start + batch_size, len(all_items))
-                batch_items = all_items[batch_start:batch_end]
-                
-                # Create tasks for this batch
-                batch_tasks = [asyncio.create_task(measure_and_set(ip, info, sem)) for ip, info in batch_items]
-                
-                # Await this batch
-                if batch_tasks:
-                    await asyncio.gather(*batch_tasks, return_exceptions=True)
-                
-                completed = batch_end
-                percent = int((completed / node_count) * 100)
-                self.logger.info(f"MTR progress: {percent}% ({completed}/{node_count})")
+            # Wait for all to complete
+            await asyncio.gather(*all_tasks, return_exceptions=True)
         finally:
             # Cancel any remaining tasks on shutdown
-            for t in batch_tasks:
+            for t in all_tasks:
                 if not t.done():
                     t.cancel()
-            await asyncio.gather(*batch_tasks, return_exceptions=True)
+            await asyncio.gather(*all_tasks, return_exceptions=True)
+        
+        # Calculate hop timing statistics
+        if hop_times:
+            self.stats['minHopCountTimeMs'] = round(min(hop_times), 2)
+            self.stats['maxHopCountTimeMs'] = round(max(hop_times), 2)
         
         self.logger.info(f"Hop measurement complete")
     
     async def _update_topology_info(self, node_devices: Dict):
         """Update database with initial topology information"""
-        # Optionally enhance hopsAway using MTR before persisting
+        # Optionally enhance hopsAway using hop measurement before persisting
         await self._maybe_update_hops(node_devices)
         for ip, info in node_devices.items():
             # Only insert pollable nodes (those with valid hopsAway)
@@ -1346,6 +1421,7 @@ class MeshPollingDaemon:
         results: List[NodeInfo] = []
         completed = 0
         total = len(tasks)
+        last_reported_percent = 0
 
         pending = set(tasks)
         try:
@@ -1365,9 +1441,14 @@ class MeshPollingDaemon:
                         continue
 
                     completed += 1
-                    if completed % 10 == 0 or completed == total:
-                        percent = int((completed / total) * 100)
-                        self.logger.info(f"Polling progress: {percent}% ({completed}/{total})")
+                    current_percent = int((completed / total) * 100)
+                    # Report at 10% intervals
+                    if current_percent >= last_reported_percent + 10 or completed == total:
+                        # Round down to nearest 10%
+                        report_percent = (current_percent // 10) * 10
+                        if report_percent > last_reported_percent or completed == total:
+                            self.logger.info(f"Polling progress: {current_percent}% ({completed}/{total})")
+                            last_reported_percent = report_percent
 
                     if result:
                         results.append(result)
@@ -1407,12 +1488,12 @@ class MeshPollingDaemon:
         self.stats['noLocation'] = no_location
         self.stats['mappableNodes'] = len(nodes) - no_location
         
-        # Calculate response time statistics
+        # Calculate JSON fetch time statistics
         if nodes:
             response_times = [n.response_time_ms for n in nodes if n.response_time_ms > 0]
             if response_times:
-                self.stats['minResponseTimeMs'] = round(min(response_times), 2)
-                self.stats['maxResponseTimeMs'] = round(max(response_times), 2)
+                self.stats['minJsonFetchTimeMs'] = round(min(response_times), 2)
+                self.stats['maxJsonFetchTimeMs'] = round(max(response_times), 2)
     
     async def _build_link_topology(self):
         """Build complete link topology with distance/bearing calculations"""
@@ -1694,17 +1775,29 @@ class MeshPollingDaemon:
             priority_list: List[str] = []
             
             # Read tile servers and priority from single section
-            tileservers_config = self.config.get('tileservers', {})
+            tileservers_config = self.config.get_section('tileservers')
             if isinstance(tileservers_config, dict):
                 # Extract priority list
                 priority_list = tileservers_config.get('priority', [])
                 if not isinstance(priority_list, list):
                     priority_list = []
-                
-                # Get all tile server URLs (exclude priority key)
+
+                # Flatten nested dicts created by dotted keys (e.g., aredn.W7SLZ)
+                def flatten(prefix: str, obj: Any):
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            name = f"{prefix}.{k}" if prefix else str(k)
+                            flatten(name, v)
+                    else:
+                        # Only accept string URLs
+                        if isinstance(obj, str):
+                            map_tile_servers[prefix] = obj
+
+                # Build map_tile_servers from tileservers_config (excluding 'priority')
                 for key, value in tileservers_config.items():
-                    if key != 'priority' and isinstance(value, str):
-                        map_tile_servers[key] = value
+                    if key == 'priority':
+                        continue
+                    flatten(key, value)
             
             # Determine default from priority list first
             if priority_list:
@@ -1800,8 +1893,10 @@ class MeshPollingDaemon:
         self.logger.info(f"Babel Nodes: {self.stats.get('babelNodes', 0)}")
         self.logger.info(f"OLSR Nodes: {self.stats.get('olsrNodes', 0)}")
         self.logger.info(f"Combo Nodes: {self.stats.get('comboNodes', 0)}")
-        self.logger.info(f"Minimum Response Time: {self.stats.get('minResponseTimeMs', 0):.2f}ms")
-        self.logger.info(f"Maximum Response Time: {self.stats.get('maxResponseTimeMs', 0):.2f}ms")
+        self.logger.info(f"Minimum JSON Fetch Time: {self.stats.get('minJsonFetchTimeMs', 0):.2f}ms")
+        self.logger.info(f"Maximum JSON Fetch Time: {self.stats.get('maxJsonFetchTimeMs', 0):.2f}ms")
+        self.logger.info(f"Minimum Hop Count Time: {self.stats.get('minHopCountTimeMs', 0):.2f}ms")
+        self.logger.info(f"Maximum Hop Count Time: {self.stats.get('maxHopCountTimeMs', 0):.2f}ms")
         self.logger.info(f"Polling Time: {self.stats['pollingTimeSec']:.2f}s ({self.stats['pollingTimeSec']/60:.2f}m)")
         self.logger.info("=" * 70)
     
@@ -1866,8 +1961,8 @@ For systemd integration, use the provided pollingScript.service file.
     )
     parser.add_argument(
         '--config',
-        default='../settings.ini',
-        help='Path to configuration file (default: ../settings.ini)'
+        default='../settings.toml',
+        help='Path to configuration file (default: ../settings.toml)'
     )
     
     args = parser.parse_args()
