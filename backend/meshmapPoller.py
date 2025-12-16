@@ -321,6 +321,7 @@ class MySQLAdapter:
         sql_db_tbl_node = self.config.get('database', 'table_node', 'node_info')
         sql_db_tbl_map = self.config.get('database', 'table_map', 'map_info')
         sql_db_tbl_aredn = self.config.get('database', 'table_aredn', 'aredn_info')
+        sql_db_tbl_hops = self.config.get('database', 'table_hops', 'hop_sequences')
         
         async with self.pool.acquire() as conn:
             # Suppress warnings for "table already exists"
@@ -394,6 +395,20 @@ class MySQLAdapter:
                         `version_type` VARCHAR(50) DEFAULT NULL,
                         `version` VARCHAR(50) DEFAULT NULL,
                         `updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """)
+                
+                # Create hop_sequences table if not exists
+                await cur.execute(f"""
+                    CREATE TABLE IF NOT EXISTS `{sql_db_tbl_hops}` (
+                        `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        `node_ip` VARCHAR(45) NOT NULL,
+                        `measured_at` TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+                        `hop_count` INT DEFAULT 0,
+                        `hop_sequence` TEXT NOT NULL,
+                        `measurement_time_ms` FLOAT DEFAULT 0.0,
+                        INDEX `idx_node_ip` (`node_ip`),
+                        INDEX `idx_measured_at` (`measured_at`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """)
                 
@@ -542,6 +557,30 @@ class MySQLAdapter:
                     stats['pollingTimeSec']
                 )
                 await cur.execute(sql, values)
+
+    async def insert_hop_sequence(self, node_ip: str, hop_count: int, hop_sequence: str, measurement_time_ms: float):
+        """Insert a hop sequence measurement"""
+        sql_db_tbl_hops = self.config.get('database', 'table_hops', 'hop_sequences')
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                sql = f"""
+                    INSERT INTO `{sql_db_tbl_hops}` 
+                    (node_ip, hop_count, hop_sequence, measurement_time_ms)
+                    VALUES (%s, %s, %s, %s)
+                """
+                await cur.execute(sql, (node_ip, hop_count, hop_sequence, measurement_time_ms))
+    
+    async def expire_old_hop_sequences(self, days: int):
+        """Delete hop sequences older than specified days"""
+        sql_db_tbl_hops = self.config.get('database', 'table_hops', 'hop_sequences')
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                sql = f"""
+                    DELETE FROM `{sql_db_tbl_hops}` 
+                    WHERE measured_at < DATE_SUB(NOW(), INTERVAL %s DAY)
+                """
+                result = await cur.execute(sql, (days,))
+                logging.info(f"Expired {result} old hop sequences older than {days} days")
 
     async def flush_database(self):
         """Truncate the node_info table"""
@@ -1056,6 +1095,13 @@ class MeshPollingDaemon:
         # Step 10: Save statistics after protocol counts are populated
         await self.db.save_polling_stats(self.stats)
         
+        # Step 11: Expire old hop sequences based on retention policy
+        expire_hops_days = self.config.getint('retention', 'expireHops', 30)
+        try:
+            await self.db.expire_old_hop_sequences(expire_hops_days)
+        except Exception as e:
+            self.logger.warning(f"Failed to expire old hop sequences: {e}")
+        
         self.logger.info(f"Poll cycle completed in {elapsed:.2f} seconds ({elapsed/60:.2f} minutes)")
         self._log_statistics()
     
@@ -1213,19 +1259,18 @@ class MeshPollingDaemon:
         self.stats['highestHops'] = max_hops
         return nodes
 
-    async def _measure_hops(self, target_ip: str) -> Optional[Tuple[int, float]]:
-        """Measure hop count to target_ip using async subprocess.
-        Returns (hop_count, time_ms) tuple, or None on failure. Requires traceroute installed and ICMP permitted.
+    async def _measure_hops(self, target_ip: str) -> Optional[Tuple[int, float, str]]:
+        """Measure hop count and sequence to target_ip using traceroute subprocess.
+        Returns (hop_count, time_ms, hop_sequence) tuple, or None on failure.
         """
         import time
+        import re
+        
         start_time = time.time()
         try:
-            import re
-            # Use traceroute with max TTL and wait time per probe
             max_ttl = int(self.config.get('hops', 'maxTTL', 32))
-            wait_time = float(self.config.get('hops', 'probeWaitSec', 0.5))
-            # Subprocess timeout should be generous enough for max_ttl * wait_time
-            timeout_sec = float(self.config.get('hops', 'timeoutSec', max_ttl * wait_time + 2.0))
+            wait_time = float(self.config.get('hops', 'probeWaitSec', 2.0))
+            timeout_sec = float(self.config.get('hops', 'timeoutSec', 80.0))
 
             traceroute_args = [
                 'traceroute', '-n', '-w', str(wait_time), '-m', str(max_ttl), str(target_ip)
@@ -1249,25 +1294,33 @@ class MeshPollingDaemon:
             elapsed_ms = (time.time() - start_time) * 1000
             
             if proc.returncode != 0:
-                self.logger.error(f"Hop measurement failed for {target_ip}: returncode={proc.returncode}, stderr={stderr.decode()[:200]}")
+                self.logger.debug(f"Hop measurement failed for {target_ip}: returncode={proc.returncode}")
                 return None
             
-            # Get the last line with output
+            # Parse hop lines to build sequence
             lines = [l.strip() for l in stdout.decode().splitlines() if l.strip()]
             if not lines:
                 self.logger.debug(f"Hop measurement for {target_ip}: no output from traceroute")
                 return None
             
-            # Parse the last line for hop number (first field)
-            last_line = lines[-1]
-            match = re.match(r'^\s*(\d+)', last_line)
-            if match:
-                hop_count = int(match.group(1))
-                self.logger.debug(f"Hop measurement for {target_ip}: measured {hop_count} hops in {elapsed_ms:.2f}ms")
-                return (hop_count, elapsed_ms)
-            else:
-                self.logger.debug(f"Hop measurement for {target_ip}: could not parse hop count from: {last_line}")
+            # Extract hop sequence: capture first IP or asterisk after hop number
+            hop_sequence = []
+            hop_re = re.compile(r'^\s*(\d+)\s+(?:(\d+\.\d+\.\d+\.\d+)|\*)')
+            for line in lines:
+                match = hop_re.match(line)
+                if match:
+                    hop_ip = match.group(2) if match.group(2) else '*'
+                    hop_sequence.append(hop_ip)
+            
+            if not hop_sequence:
+                self.logger.debug(f"Hop measurement for {target_ip}: could not parse hop sequence")
                 return None
+            
+            hop_count = len(hop_sequence)
+            hop_seq_str = ','.join(hop_sequence)
+            
+            self.logger.debug(f"Hop measurement for {target_ip}: measured {hop_count} hops in {elapsed_ms:.2f}ms, sequence: {hop_seq_str}")
+            return (hop_count, elapsed_ms, hop_seq_str)
         except Exception as e:
             self.logger.debug(f"Hop measurement for {target_ip}: exception {e}")
             return None
@@ -1300,14 +1353,22 @@ class MeshPollingDaemon:
                 if self.shutdown_event.is_set():
                     return
                 # Run async subprocess directly (no threading overhead)
-                result = await self._measure_hops(ip)
-                self.logger.debug(f"Hop measurement result for {ip}: {result}")
-                if result is not None:
-                    hop_count, elapsed_ms = result
-                    # Subtract 1 from measured hop count before storing
-                    info['hopsAway'] = max(0, hop_count - 1)
-                    hop_times.append(elapsed_ms)
-                # If measurement fails, leave hopsAway at its default value (1 from topology)
+                try:
+                    result = await self._measure_hops(ip)
+                    self.logger.debug(f"Hop measurement result for {ip}: {result}")
+                    if result is not None:
+                        hop_count, elapsed_ms, hop_sequence = result
+                        # Subtract 1 from measured hop count before storing
+                        info['hopsAway'] = max(0, hop_count - 1)
+                        hop_times.append(elapsed_ms)
+                        # Store hop sequence to database
+                        try:
+                            await self.db.insert_hop_sequence(ip, hop_count, hop_sequence, elapsed_ms)
+                        except Exception as e:
+                            self.logger.debug(f"Failed to store hop sequence for {ip}: {e}")
+                    # If measurement fails, leave hopsAway at its default value (1 from topology)
+                except Exception as e:
+                    self.logger.error(f"Hop measurement exception for {ip}: {type(e).__name__}: {e}")
 
         # Launch all hop measurement tasks at once with progress reporting at 10% completion intervals
         node_count = len(node_devices)
@@ -2007,6 +2068,7 @@ async def _flush_database(config: ConfigManager):
     sql_db_tbl_node = config.get('database', 'table_node', 'node_info')
     sql_db_tbl_map = config.get('database', 'table_map', 'map_info')
     sql_db_tbl_aredn = config.get('database', 'table_aredn', 'aredn_info')
+    sql_db_tbl_hops = config.get('database', 'table_hops', 'hop_sequences')
     
     print(f"Initializing MariaDB database '{sql_db}' with user '{sql_user}'...")
     
@@ -2046,6 +2108,7 @@ async def _flush_database(config: ConfigManager):
             await cur.execute(f"DROP TABLE IF EXISTS `{sql_db_tbl_node}`")
             await cur.execute(f"DROP TABLE IF EXISTS `{sql_db_tbl_map}`")
             await cur.execute(f"DROP TABLE IF EXISTS `{sql_db_tbl_aredn}`")
+            await cur.execute(f"DROP TABLE IF EXISTS `{sql_db_tbl_hops}`")
             
             # Create node_info table
             print(f"Creating table '{sql_db_tbl_node}'...")
@@ -2130,6 +2193,21 @@ async def _flush_database(config: ConfigManager):
                     `version_type` VARCHAR(50) DEFAULT NULL,
                     `version` VARCHAR(50) DEFAULT NULL,
                     `updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """)
+            
+            # Create hop_sequences table
+            print(f"Creating table '{sql_db_tbl_hops}'...")
+            await cur.execute(f"""
+                CREATE TABLE `{sql_db_tbl_hops}` (
+                    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    `node_ip` VARCHAR(45) NOT NULL,
+                    `measured_at` TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+                    `hop_count` INT DEFAULT 0,
+                    `hop_sequence` TEXT NOT NULL,
+                    `measurement_time_ms` FLOAT DEFAULT 0.0,
+                    INDEX `idx_node_ip` (`node_ip`),
+                    INDEX `idx_measured_at` (`measured_at`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """)
         

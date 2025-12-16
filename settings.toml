@@ -10,6 +10,7 @@ database = "node_map"
 table_node = "node_info"
 table_map = "map_info"
 table_aredn = "aredn_info"
+table_hops = "hop_sequences"
 
 [polling]
 nodelistNode = "localnode.local.mesh"
@@ -19,10 +20,10 @@ pollerCycleTime = 15
 
 [hops]
 enableHopCount = true
-parallelThreads = 800
-probeWaitSec = 0.5
+parallelThreads = 50
+probeWaitSec = 2.0
 maxTTL = 32
-timeoutSec = 20.0
+timeoutSec = 80.0
 
 [map]
 center_lat = 43.970
@@ -41,6 +42,7 @@ pageTitle = "Node Report"
 [retention]
 expireOldNodes = true
 expireInterval = 30
+expireHops = 30
 
 [json]
 jsonDir = "/srv/meshmap/frontend/data"
