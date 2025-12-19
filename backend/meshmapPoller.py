@@ -582,6 +582,18 @@ class MySQLAdapter:
                 result = await cur.execute(sql, (days,))
                 logging.info(f"Expired {result} old hop sequences older than {days} days")
 
+    async def expire_old_nodes(self, days: int):
+        """Delete nodes not seen within retention period"""
+        sql_db_tbl_node = self.config.get('database', 'table_node', 'node_info')
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                sql = f"""
+                    DELETE FROM `{sql_db_tbl_node}` 
+                    WHERE last_seen < DATE_SUB(NOW(), INTERVAL %s DAY)
+                """
+                result = await cur.execute(sql, (days,))
+                logging.info(f"Expired {result} old nodes not seen in {days} days")
+
     async def flush_database(self):
         """Truncate the node_info table"""
         async with self.pool.acquire() as conn:
@@ -1095,12 +1107,22 @@ class MeshPollingDaemon:
         # Step 10: Save statistics after protocol counts are populated
         await self.db.save_polling_stats(self.stats)
         
-        # Step 11: Expire old hop sequences based on retention policy
+        # Step 11: Expire old data based on retention policy
+        # Expire old hop sequences
         expire_hops_days = self.config.getint('retention', 'expireHops', 30)
         try:
             await self.db.expire_old_hop_sequences(expire_hops_days)
         except Exception as e:
             self.logger.warning(f"Failed to expire old hop sequences: {e}")
+        
+        # Expire old nodes if enabled
+        expire_nodes_enabled = self.config.get('retention', 'expireOldNodes', True)
+        expire_nodes_days = self.config.getint('retention', 'expireInterval', 30)
+        if expire_nodes_enabled and expire_nodes_days > 0:
+            try:
+                await self.db.expire_old_nodes(expire_nodes_days)
+            except Exception as e:
+                self.logger.warning(f"Failed to expire old nodes: {e}")
         
         self.logger.info(f"Poll cycle completed in {elapsed:.2f} seconds ({elapsed/60:.2f} minutes)")
         self._log_statistics()
@@ -1662,6 +1684,54 @@ class MeshPollingDaemon:
             
             # Get all nodes from database
             all_nodes = await self.db.get_all_nodes()
+            
+            # Apply retention filter if enabled
+            expire_enabled = self.config.get('retention', 'expireOldNodes', True)
+            expire_days = self.config.getint('retention', 'expireInterval', 30)
+            
+            if expire_enabled and expire_days > 0:
+                cutoff_time = datetime.now(timezone.utc) - timedelta(days=expire_days)
+                self.logger.info(f"Filtering nodes: retention period is {expire_days} days (cutoff: {cutoff_time.isoformat()})")
+                
+                # Filter nodes based on last_seen timestamp
+                filtered_nodes = []
+                excluded_count = 0
+                for node in all_nodes:
+                    last_seen_raw = node.get('last_seen')
+                    if last_seen_raw:
+                        # Parse last_seen to datetime
+                        if isinstance(last_seen_raw, datetime):
+                            last_seen_dt = last_seen_raw
+                            # Make timezone-aware if naive
+                            if last_seen_dt.tzinfo is None:
+                                last_seen_dt = last_seen_dt.replace(tzinfo=timezone.utc)
+                        elif isinstance(last_seen_raw, str):
+                            try:
+                                last_seen_dt = datetime.fromisoformat(last_seen_raw.replace('Z', '+00:00'))
+                            except:
+                                # If parsing fails, include the node (don't risk losing data)
+                                filtered_nodes.append(node)
+                                continue
+                        else:
+                            # Unknown format, include the node
+                            filtered_nodes.append(node)
+                            continue
+                        
+                        # Only include nodes seen within retention period
+                        if last_seen_dt >= cutoff_time:
+                            filtered_nodes.append(node)
+                        else:
+                            excluded_count += 1
+                            self.logger.debug(f"Excluding node {node.get('node', 'unknown')} ({node.get('wlan_ip')}): last seen {last_seen_dt.isoformat()}")
+                    else:
+                        # No last_seen timestamp - exclude from JSON output
+                        excluded_count += 1
+                        self.logger.debug(f"Excluding node {node.get('node', 'unknown')} ({node.get('wlan_ip')}): no last_seen timestamp")
+                
+                all_nodes = filtered_nodes
+                self.logger.info(f"Retention filter: kept {len(all_nodes)} nodes, excluded {excluded_count} nodes")
+            else:
+                self.logger.info("Node retention filter disabled - including all database nodes")
             
             # Organize devices by frequency band (matching PHP createJS.inc logic)
             all_devices = {

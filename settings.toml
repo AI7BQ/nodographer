@@ -39,9 +39,22 @@ credit = "© OpenStreetMap contributors"
 browserTitle = "Nodographer Node Report"
 pageTitle = "Node Report"
 
+# Data retention settings
+# Nodes are stored in the database even if they temporarily disappear from polls.
+# This allows the system to "ride through" temporary network issues or unreachable nodes.
 [retention]
+# Enable automatic cleanup of old nodes from the database
 expireOldNodes = true
+
+# Number of days to retain nodes in database after their last_seen timestamp
+# Nodes not seen within this period will be:
+# 1. Excluded from JSON output files (map_data.json and node_report_data.json)
+# 2. Eventually deleted from the database (if expireOldNodes is true)
+# This allows nodes to temporarily drop out for one or more polling cycles
+# without being removed from the map, providing stability during network issues.
 expireInterval = 30
+
+# Number of days to retain hop sequence measurements
 expireHops = 30
 
 [json]
