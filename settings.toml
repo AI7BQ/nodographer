@@ -61,10 +61,11 @@ expireHops = 30
 jsonDir = "/srv/meshmap/frontend/data"
 
 [tileservers]
-aredn.K1RKS = "//aredn-tileserver2.local.mesh/hot/{z}/{x}/{y}.png"
+aredn.K1RKS = "//k1rks-tileserver-world.local.mesh/hot/{z}/{x}/{y}.png"
 aredn.K9RCP = "//wvmn-tileserver.local.mesh/osm/tiles/{z}/{x}/{y}.png"
 aredn.W7SLZ = "//w7slz-tileserver.local.mesh:8080/styles/basic-preview/512/{z}/{x}/{y}.png"
 inet.Topographic = "//{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
 inet.Street = "//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
 
 priority = ["aredn.K1RKS", "aredn.K9RCP", "aredn.W7SLZ", "inet.Topographic", "inet.Street"]
+
